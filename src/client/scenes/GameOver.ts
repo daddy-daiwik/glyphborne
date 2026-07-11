@@ -215,6 +215,10 @@ export class GameOver extends Scene {
       .setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.leaderboardContainer.add(this.tabDepthBtn);
 
+    this.tabTridentBtn = this.add.text(0, 0, 'TRIDENT', txt('15px', '#ffffff', 3))
+      .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.leaderboardContainer.add(this.tabTridentBtn);
+
     this.tabLightningBtn = this.add.text(0, 0, 'LIGHTNING', txt('15px', '#ffffff', 3))
       .setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.leaderboardContainer.add(this.tabLightningBtn);
@@ -223,17 +227,29 @@ export class GameOver extends Scene {
       .setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.leaderboardContainer.add(this.tabNovaBtn);
 
+    this.tabPoisonBtn = this.add.text(0, 0, 'POISON', txt('15px', '#ffffff', 3))
+      .setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.leaderboardContainer.add(this.tabPoisonBtn);
+
     // Tab click handlers
     this.tabDepthBtn.on('pointerdown', () => {
       this.selectedTab = 0;
       this.updateLayout(this.scale.width, this.scale.height);
     });
-    this.tabLightningBtn.on('pointerdown', () => {
+    this.tabTridentBtn.on('pointerdown', () => {
       this.selectedTab = 1;
       this.updateLayout(this.scale.width, this.scale.height);
     });
-    this.tabNovaBtn.on('pointerdown', () => {
+    this.tabLightningBtn.on('pointerdown', () => {
       this.selectedTab = 2;
+      this.updateLayout(this.scale.width, this.scale.height);
+    });
+    this.tabNovaBtn.on('pointerdown', () => {
+      this.selectedTab = 3;
+      this.updateLayout(this.scale.width, this.scale.height);
+    });
+    this.tabPoisonBtn.on('pointerdown', () => {
+      this.selectedTab = 4;
       this.updateLayout(this.scale.width, this.scale.height);
     });
 
@@ -243,14 +259,24 @@ export class GameOver extends Scene {
     this.leaderboardContainer.add(this.overlayCol1Title);
 
     this.overlayCol2Title = this.add
-      .text(0, 0, 'TOP LIGHTNING', txt('15px', '#ffd740', 5))
+      .text(0, 0, 'TOP TRIDENT', txt('15px', '#ffd740', 5))
       .setOrigin(0.5);
     this.leaderboardContainer.add(this.overlayCol2Title);
 
     this.overlayCol3Title = this.add
-      .text(0, 0, 'TOP NOVA', txt('15px', '#e040fb', 5))
+      .text(0, 0, 'TOP LIGHTNING', txt('15px', '#ff9100', 5))
       .setOrigin(0.5);
     this.leaderboardContainer.add(this.overlayCol3Title);
+
+    this.overlayCol4Title = this.add
+      .text(0, 0, 'TOP NOVA', txt('15px', '#e040fb', 5))
+      .setOrigin(0.5);
+    this.leaderboardContainer.add(this.overlayCol4Title);
+
+    this.overlayCol5Title = this.add
+      .text(0, 0, 'TOP POISON', txt('15px', '#00e676', 5))
+      .setOrigin(0.5);
+    this.leaderboardContainer.add(this.overlayCol5Title);
 
     const listStyle = {
       fontFamily: 'monospace',
@@ -271,6 +297,12 @@ export class GameOver extends Scene {
 
     this.overlayCol3List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
     this.leaderboardContainer.add(this.overlayCol3List);
+
+    this.overlayCol4List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
+    this.leaderboardContainer.add(this.overlayCol4List);
+
+    this.overlayCol5List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
+    this.leaderboardContainer.add(this.overlayCol5List);
 
     this.overlayCloseButton = this.add
       .text(0, 0, 'CLOSE', txt('20px', '#ff5252', 6))
