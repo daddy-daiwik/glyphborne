@@ -14,12 +14,15 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: 'game-container',
   backgroundColor: '#028af8',
   scale: {
-    // Keep a fixed game resolution but automatically scale it to fit within the available
+    // Keep a fixed game resolution but automatically scale it to fill/fit within the available
     // web-view / device while maintaining aspect ratio.
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: 1024,
     height: 768,
+  },
+  input: {
+    activePointers: 3,
   },
   scene: [Boot, Preloader, SplashScene, MainMenu, MainGame, GameOver],
 };

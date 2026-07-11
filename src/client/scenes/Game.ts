@@ -89,6 +89,7 @@ type SpellProjectile = {
   hitEnemies: Set<Enemy>;
   lifetime: number;
   chainCount?: number;
+  castId?: number;
 };
 
 // 4 spells only
@@ -289,6 +290,12 @@ export class Game extends Scene {
   comboCountText: Phaser.GameObjects.Text | null = null;
   gameTime: number = 0;
 
+  // Spell Tracking
+  bestTridentChain: number = 0;
+  bestPoisonChain: number = 0;
+  lastCastId: number = 0;
+  tridentHits: Map<number, Set<Enemy>> = new Map();
+
   // FX engine
   fxParticles: FXParticle[] = [];
   fxRings: FXRing[] = [];
@@ -351,6 +358,10 @@ export class Game extends Scene {
     this.fxParticles = [];
     this.fxRings = [];
     this.fxGraphics = null;
+    this.bestTridentChain = 0;
+    this.bestPoisonChain = 0;
+    this.lastCastId = 0;
+    this.tridentHits.clear();
 
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
     const shapes = ['triangle', 'circle', 'square'] as const;
@@ -573,6 +584,9 @@ export class Game extends Scene {
         this.dragMoveDX = 0;
         this.dragMoveDY = 0;
         this.tapMoved = false;
+      } else {
+        // Multi-touch: secondary finger is used to cast/shoot immediately on tap
+        this.castSpell(pointer.worldX, pointer.worldY);
       }
     });
 
@@ -2096,6 +2110,10 @@ export class Game extends Scene {
 
     switch (id) {
       case 'trident': {
+        this.lastCastId++;
+        const castId = this.lastCastId;
+        this.tridentHits.set(castId, new Set<Enemy>());
+
         const coneAngles = [-0.18, 0, 0.18]; // coned region offsets in radians (~10 degrees left/right)
         const baseAngle = Math.atan2(uy, ux);
         
@@ -2118,6 +2136,7 @@ export class Game extends Scene {
             hitEnemies: new Set(),
             lifetime: SPELL_LIFETIME,
             chainCount: 0,
+            castId,
           });
         });
         break;
@@ -2277,6 +2296,7 @@ export class Game extends Scene {
 
         // Damage enemies in cone
         const list = [...this.enemies];
+        let poisonHits = 0;
         for (let i = list.length - 1; i >= 0; i--) {
           const e = list[i]!;
           const edx = e.x - this.playerX;
@@ -2298,8 +2318,13 @@ export class Game extends Scene {
           const damage = POISON_DAMAGE_CLOSE * (1 - distRatio * 0.5);
 
           const idx = this.enemies.indexOf(e);
-          if (idx !== -1) this.damageEnemy(e, idx, damage, 'poison');
+          if (idx !== -1) {
+            this.damageEnemy(e, idx, damage, 'poison');
+            poisonHits++;
+          }
         }
+
+        this.bestPoisonChain = Math.max(this.bestPoisonChain, poisonHits);
 
         // Screen tint flash green
         this.cameras.main.flash(80, 0, 180, 0, true);
@@ -2358,6 +2383,17 @@ export class Game extends Scene {
           if (idx !== -1) {
             this.damageEnemy(e, idx, p.damage, p.spell);
 
+            // Record unique hit enemies for this trident cast tree
+            if (p.spell === 'trident' && p.castId !== undefined) {
+              let hitSet = this.tridentHits.get(p.castId);
+              if (!hitSet) {
+                hitSet = new Set<Enemy>();
+                this.tridentHits.set(p.castId, hitSet);
+              }
+              hitSet.add(e);
+              this.bestTridentChain = Math.max(this.bestTridentChain, hitSet.size);
+            }
+
             // Chain reactions: Trident spawns 3 child spears
             if (p.spell === 'trident' && (p.chainCount || 0) < 3) {
               const baseAngle = Math.atan2(p.vy, p.vx);
@@ -2370,7 +2406,7 @@ export class Game extends Scene {
                 const tvy = Math.sin(angle) * TRIDENT_SPEED;
                 const graphics = this.add.graphics().setDepth(7);
 
-                this.spellProjectiles.push({
+                const proj: SpellProjectile = {
                   graphics,
                   x: e.x,
                   y: e.y,
@@ -2385,7 +2421,11 @@ export class Game extends Scene {
                   hitEnemies: new Set([e]), // Ignore the parent hit enemy
                   lifetime: SPELL_LIFETIME * 0.8, // Shorter lifetime
                   chainCount: nextChain,
-                });
+                };
+                if (p.castId !== undefined) {
+                  proj.castId = p.castId;
+                }
+                this.spellProjectiles.push(proj);
               });
             }
           }

@@ -31,8 +31,10 @@ export type LeaderboardEntry = {
 
 export type LeaderboardsData = {
   score: LeaderboardEntry[];
+  trident: LeaderboardEntry[];
   lightning: LeaderboardEntry[];
   nova: LeaderboardEntry[];
+  poison: LeaderboardEntry[];
 };
 
 export type LeaderboardGetResponse = {

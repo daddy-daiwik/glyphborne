@@ -7,25 +7,67 @@
       name="viewport"
       content="initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, width=device-width, height=device-height, user-scalable=0"
     />
-    <title>devvit</title>
+    <title>Glyphborne</title>
   </head>
   <body class="app">
-    <img class="snoo" src="/snoo.png" alt="Snoo" />
-    <div class="content">
-      <h1 class="title" id="title"></h1>
-      <p class="description">
-        Edit <span class="code">src/client/splash.ts</span> to get started.
-      </p>
+    <div class="glow-container">
+      <svg class="splash-fish" viewBox="0 0 200 200" width="130" height="130" xmlns="http://www.w3.org/2000/svg">
+        <!-- Lure Antenna -->
+        <path d="M 100 65 Q 125 15 155 65" fill="none" stroke="#00e5ff" stroke-width="3" stroke-linecap="round" />
+        
+        <!-- Lure Glows (Animated) -->
+        <circle class="lure-glow" cx="155" cy="65" r="18" fill="#00e5ff" />
+        <circle class="lure-glow-mid" cx="155" cy="65" r="11" fill="#00e5ff" />
+        <circle cx="155" cy="65" r="5" fill="#ffffff" />
+
+        <!-- Tail Fin -->
+        <path d="M 52 105 L 20 75 L 32 105 L 20 135 Z" fill="#001a33" stroke="#00e5ff" stroke-width="3" stroke-linejoin="round" />
+
+        <!-- Dorsal Fin -->
+        <path d="M 75 62 L 50 35 L 52 68 Z" fill="#001a33" stroke="#00e5ff" stroke-width="3" stroke-linejoin="round" />
+
+        <!-- Main Body -->
+        <circle cx="95" cy="105" r="45" fill="#001122" stroke="#00e5ff" stroke-width="3.5" />
+
+        <!-- Goofy Cartoon Eyes -->
+        <!-- Left Eye -->
+        <circle cx="112" cy="90" r="10" fill="#ffffff" stroke="#00e5ff" stroke-width="1.5" />
+        <circle cx="114" cy="90" r="4.5" fill="#000000" />
+        
+        <!-- Right Eye (Overlapping slightly) -->
+        <circle cx="127" cy="97" r="8" fill="#ffffff" stroke="#00e5ff" stroke-width="1.5" />
+        <circle cx="128" cy="97" r="3.5" fill="#000000" />
+
+        <!-- Cute Sharp Teeth (Mouth) -->
+        <path d="M 105 118 Q 120 128 132 112 L 126 114 L 121 109 L 117 114 Z" fill="#ffffff" stroke="#00e5ff" stroke-width="2" stroke-linejoin="round" />
+      </svg>
+
+      <div class="logo-box">
+        <h1 class="logo-text">GLYPHBORNE</h1>
+        <p class="subtitle">Abyssal Depths Roguelike</p>
+      </div>
+
+      <div class="info-card">
+        <p class="description">
+          Combine geometric essence to cast abyssal spells, defeat entities, and climb the daily leaderboard challenge!
+        </p>
+        <div class="daily-box" id="daily-box">
+          <span class="daily-badge">DAILY TARGET</span>
+          <span class="daily-glyph" id="daily-glyph">Loading target...</span>
+        </div>
+      </div>
+
+      <button class="start-button" id="start-button">
+        ENTER THE DEPTHS
+      </button>
     </div>
-    <div>
-      <button class="start-button" id="start-button">Start</button>
-    </div>
+
     <footer class="footer">
-      <div class="docs-link" tabindex="0" id="docs-link">Docs</div>
+      <div class="docs-link" id="docs-link">Docs</div>
       <span class="divider">|</span>
-      <div class="docs-link" tabindex="0" id="playtest-link">r/Devvit</div>
+      <div class="docs-link" id="playtest-link">r/Devvit</div>
       <span class="divider">|</span>
-      <div class="docs-link" tabindex="0" id="discord-link">Discord</div>
+      <div class="docs-link" id="discord-link">Discord</div>
     </footer>
     <script type="module" src="splash.ts" defer></script>
   </body>

@@ -4,8 +4,10 @@ import type { LeaderboardsData, LeaderboardPostResponse } from '../../shared/api
 
 type GameOverData = {
   score: number;
+  bestTridentChain?: number;
   bestLightningChain?: number;
   bestNovaChain?: number;
+  bestPoisonChain?: number;
 };
 
 // Helper: fixed text style factory
@@ -55,20 +57,28 @@ export class GameOver extends Scene {
   overlayCol1Title: Phaser.GameObjects.Text | null = null;
   overlayCol2Title: Phaser.GameObjects.Text | null = null;
   overlayCol3Title: Phaser.GameObjects.Text | null = null;
+  overlayCol4Title: Phaser.GameObjects.Text | null = null;
+  overlayCol5Title: Phaser.GameObjects.Text | null = null;
   overlayCol1List: Phaser.GameObjects.Text | null = null;
   overlayCol2List: Phaser.GameObjects.Text | null = null;
   overlayCol3List: Phaser.GameObjects.Text | null = null;
+  overlayCol4List: Phaser.GameObjects.Text | null = null;
+  overlayCol5List: Phaser.GameObjects.Text | null = null;
   overlayCloseButton: Phaser.GameObjects.Text | null = null;
 
   tabDepthBtn: Phaser.GameObjects.Text | null = null;
+  tabTridentBtn: Phaser.GameObjects.Text | null = null;
   tabLightningBtn: Phaser.GameObjects.Text | null = null;
   tabNovaBtn: Phaser.GameObjects.Text | null = null;
+  tabPoisonBtn: Phaser.GameObjects.Text | null = null;
   selectedTab: number = 0;
 
   // Data
   finalScore: number = 0;
+  bestTridentChain: number = 0;
   bestLightningChain: number = 0;
   bestNovaChain: number = 0;
+  bestPoisonChain: number = 0;
   leaderboardsData: LeaderboardsData | null = null;
 
   constructor() {
@@ -77,8 +87,10 @@ export class GameOver extends Scene {
 
   init(data: GameOverData): void {
     this.finalScore = data.score ?? 0;
+    this.bestTridentChain = data.bestTridentChain ?? 0;
     this.bestLightningChain = data.bestLightningChain ?? 0;
     this.bestNovaChain = data.bestNovaChain ?? 0;
+    this.bestPoisonChain = data.bestPoisonChain ?? 0;
     this.leaderboardsData = null;
 
     this.gameover_text = null;
@@ -98,10 +110,13 @@ export class GameOver extends Scene {
     this.viewLeaderboardsButton = null;
     this.playAgainButton = null;
     this.leaderboardContainer = null;
+    this.overlayBgGraphics = null;
     
     this.tabDepthBtn = null;
+    this.tabTridentBtn = null;
     this.tabLightningBtn = null;
     this.tabNovaBtn = null;
+    this.tabPoisonBtn = null;
     this.selectedTab = 0;
   }
 
@@ -274,8 +289,10 @@ export class GameOver extends Scene {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         score: this.finalScore,
+        tridentChain: this.bestTridentChain,
         lightningChain: this.bestLightningChain,
         novaChain: this.bestNovaChain,
+        poisonChain: this.bestPoisonChain,
       }),
     })
       .then((res) => res.json() as Promise<LeaderboardPostResponse>)
@@ -334,19 +351,35 @@ export class GameOver extends Scene {
     });
     if (this.overlayCol1List) this.overlayCol1List.setText(scoreLines || 'No entries yet');
 
+    let tridentLines = '';
+    const tridentData = this.leaderboardsData.trident || [];
+    tridentData.forEach((entry, i) => {
+      const name = entry.username.substring(0, maxNameLen);
+      tridentLines += `#${i + 1} ${name} ${entry.score}\n`;
+    });
+    if (this.overlayCol2List) this.overlayCol2List.setText(tridentLines || 'No entries yet');
+
     let lightningLines = '';
     this.leaderboardsData.lightning.forEach((entry, i) => {
       const name = entry.username.substring(0, maxNameLen);
       lightningLines += `#${i + 1} ${name} ${entry.score}\n`;
     });
-    if (this.overlayCol2List) this.overlayCol2List.setText(lightningLines || 'No entries yet');
+    if (this.overlayCol3List) this.overlayCol3List.setText(lightningLines || 'No entries yet');
 
     let novaLines = '';
     this.leaderboardsData.nova.forEach((entry, i) => {
       const name = entry.username.substring(0, maxNameLen);
       novaLines += `#${i + 1} ${name} ${entry.score}\n`;
     });
-    if (this.overlayCol3List) this.overlayCol3List.setText(novaLines || 'No entries yet');
+    if (this.overlayCol4List) this.overlayCol4List.setText(novaLines || 'No entries yet');
+
+    let poisonLines = '';
+    const poisonData = this.leaderboardsData.poison || [];
+    poisonData.forEach((entry, i) => {
+      const name = entry.username.substring(0, maxNameLen);
+      poisonLines += `#${i + 1} ${name} ${entry.score}\n`;
+    });
+    if (this.overlayCol5List) this.overlayCol5List.setText(poisonLines || 'No entries yet');
 
     this.updateLayout(this.scale.width, this.scale.height);
   }
@@ -481,32 +514,44 @@ export class GameOver extends Scene {
 
     // ── Tab buttons placement
     const tabY = height * 0.23;
-    const tabGap = isMobile ? 75 : 125;
+    const tabGap = isMobile ? 55 : 85;
 
     if (this.tabDepthBtn) {
-      this.tabDepthBtn.setPosition(midX - tabGap, tabY);
-      this.tabDepthBtn.setFontSize(isMobile ? '12px' : '15px');
+      this.tabDepthBtn.setPosition(midX - tabGap * 2, tabY);
+      this.tabDepthBtn.setFontSize(isMobile ? '10px' : '13px');
       this.tabDepthBtn.setColor(this.selectedTab === 0 ? '#ffd740' : '#ffffff');
-      this.tabDepthBtn.setStroke('#000000', this.selectedTab === 0 ? 4 : 2);
+      this.tabDepthBtn.setStroke('#000000', this.selectedTab === 0 ? 3.5 : 2);
+    }
+    if (this.tabTridentBtn) {
+      this.tabTridentBtn.setPosition(midX - tabGap, tabY);
+      this.tabTridentBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabTridentBtn.setColor(this.selectedTab === 1 ? '#ffd740' : '#ffffff');
+      this.tabTridentBtn.setStroke('#000000', this.selectedTab === 1 ? 3.5 : 2);
     }
     if (this.tabLightningBtn) {
       this.tabLightningBtn.setPosition(midX, tabY);
-      this.tabLightningBtn.setFontSize(isMobile ? '12px' : '15px');
-      this.tabLightningBtn.setColor(this.selectedTab === 1 ? '#ffd740' : '#ffffff');
-      this.tabLightningBtn.setStroke('#000000', this.selectedTab === 1 ? 4 : 2);
+      this.tabLightningBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabLightningBtn.setColor(this.selectedTab === 2 ? '#ffd740' : '#ffffff');
+      this.tabLightningBtn.setStroke('#000000', this.selectedTab === 2 ? 3.5 : 2);
     }
     if (this.tabNovaBtn) {
       this.tabNovaBtn.setPosition(midX + tabGap, tabY);
-      this.tabNovaBtn.setFontSize(isMobile ? '12px' : '15px');
-      this.tabNovaBtn.setColor(this.selectedTab === 2 ? '#ffd740' : '#ffffff');
-      this.tabNovaBtn.setStroke('#000000', this.selectedTab === 2 ? 4 : 2);
+      this.tabNovaBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabNovaBtn.setColor(this.selectedTab === 3 ? '#ffd740' : '#ffffff');
+      this.tabNovaBtn.setStroke('#000000', this.selectedTab === 3 ? 3.5 : 2);
+    }
+    if (this.tabPoisonBtn) {
+      this.tabPoisonBtn.setPosition(midX + tabGap * 2, tabY);
+      this.tabPoisonBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabPoisonBtn.setColor(this.selectedTab === 4 ? '#ffd740' : '#ffffff');
+      this.tabPoisonBtn.setStroke('#000000', this.selectedTab === 4 ? 3.5 : 2);
     }
 
     // Centered columns title & list
     const lbTitleY = height * 0.31;
     const lbListY = lbTitleY + 24;
 
-    const titleSize = isMobile ? '13px' : '15px';
+    const titleSize = isMobile ? '12px' : '15px';
     const listSize = isMobile ? '12px' : '13px';
     const listSpacing = isMobile ? 5 : 6;
 
@@ -523,7 +568,7 @@ export class GameOver extends Scene {
       this.overlayCol1List.setVisible(this.selectedTab === 0);
     }
 
-    // Col 2: Lightning (selectedTab === 1)
+    // Col 2: Trident (selectedTab === 1)
     setPos(this.overlayCol2Title, midX, lbTitleY);
     if (this.overlayCol2Title) {
       this.overlayCol2Title.setFontSize(titleSize);
@@ -536,10 +581,9 @@ export class GameOver extends Scene {
       this.overlayCol2List.setVisible(this.selectedTab === 1);
     }
 
-    // Col 3: Nova (selectedTab === 2)
+    // Col 3: Lightning (selectedTab === 2)
     setPos(this.overlayCol3Title, midX, lbTitleY);
     if (this.overlayCol3Title) {
-      this.overlayCol3Title.setFontSize(titleSize);
       this.overlayCol3Title.setVisible(this.selectedTab === 2);
     }
     if (this.overlayCol3List) {
@@ -547,6 +591,30 @@ export class GameOver extends Scene {
       this.overlayCol3List.setFontSize(listSize);
       this.overlayCol3List.setLineSpacing(listSpacing);
       this.overlayCol3List.setVisible(this.selectedTab === 2);
+    }
+
+    // Col 4: Nova (selectedTab === 3)
+    setPos(this.overlayCol4Title, midX, lbTitleY);
+    if (this.overlayCol4Title) {
+      this.overlayCol4Title.setVisible(this.selectedTab === 3);
+    }
+    if (this.overlayCol4List) {
+      this.overlayCol4List.setPosition(midX, lbListY);
+      this.overlayCol4List.setFontSize(listSize);
+      this.overlayCol4List.setLineSpacing(listSpacing);
+      this.overlayCol4List.setVisible(this.selectedTab === 3);
+    }
+
+    // Col 5: Poison (selectedTab === 4)
+    setPos(this.overlayCol5Title, midX, lbTitleY);
+    if (this.overlayCol5Title) {
+      this.overlayCol5Title.setVisible(this.selectedTab === 4);
+    }
+    if (this.overlayCol5List) {
+      this.overlayCol5List.setPosition(midX, lbListY);
+      this.overlayCol5List.setFontSize(listSize);
+      this.overlayCol5List.setLineSpacing(listSpacing);
+      this.overlayCol5List.setVisible(this.selectedTab === 4);
     }
 
     setPos(this.overlayCloseButton, midX, height * 0.83);

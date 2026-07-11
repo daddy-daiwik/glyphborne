@@ -2,9 +2,8 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif;
-  color: #000000;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #ffffff;
 }
 
 .app {
@@ -15,55 +14,111 @@
   align-items: center;
   height: 100vh;
   margin: 0;
-  gap: 16px;
+  background: linear-gradient(135deg, #0a1628 0%, #020813 100%);
+  overflow: hidden;
+  padding: 16px;
 }
 
-.snoo {
-  object-fit: contain;
-  width: 50%;
-  max-width: 250px;
-  margin: 0 auto;
-}
-
-.content {
+.glow-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  background: rgba(0, 17, 34, 0.85);
+  border: 2px solid #00e5ff;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.25);
+  border-radius: 16px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  gap: 24px;
+  z-index: 1;
 }
 
-.title {
-  font-size: 1.5em;
-  font-weight: bold;
-  text-align: center;
+.logo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.logo-text {
+  font-size: 2.3em;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #00e5ff;
+  text-shadow: 0 0 15px rgba(0, 229, 255, 0.65), 0 0 2px #001a33;
+}
+
+.subtitle {
+  font-size: 0.95em;
+  color: #ffd740;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  font-weight: 700;
+}
+
+.info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .description {
-  font-size: 1em;
-  text-align: center;
-  color: #5c6c74;
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: #a0c0d0;
 }
 
-.code {
-  background-color: #e5ebee;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-.start-button {
-  background-color: #d93900;
-  color: #ffffff;
+.daily-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(0, 229, 255, 0.45);
+  border-radius: 8px;
+  padding: 8px 12px;
+  gap: 10px;
+}
+
+.daily-badge {
+  font-size: 0.72em;
+  background: #ffd740;
+  color: #001122;
+  font-weight: bold;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.daily-glyph {
+  font-size: 0.88em;
+  font-weight: bold;
+  color: #00e5ff;
+}
+
+.start-button {
+  background: #ffd740;
+  color: #001122;
   border: none;
-  padding: 6px 16px;
-  height: 28px;
-  font-size: 1.1em;
+  font-weight: 900;
+  font-size: 1.05em;
+  letter-spacing: 1px;
+  padding: 12px 28px;
   border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  box-shadow: 0 0 12px rgba(255, 215, 64, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.start-button:hover {
+  background: #ffea70;
+  transform: scale(1.03);
+  box-shadow: 0 0 20px rgba(255, 215, 64, 0.55);
+}
+
+.start-button:active {
+  transform: scale(0.98);
 }
 
 .footer {
@@ -74,13 +129,65 @@
   display: flex;
   gap: 12px;
   font-size: 0.8em;
-  color: #666666;
+  color: #8090a0;
 }
 
 .docs-link {
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.docs-link:hover {
+  color: #00e5ff;
 }
 
 .divider {
-  color: rgba(0, 0, 0, 0.1);
+  color: rgba(255, 255, 255, 0.15);
+}
+
+/* Anglerfish animations */
+.splash-fish {
+  animation: float-fish 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.4));
+}
+
+.lure-glow {
+  transform-origin: 155px 65px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.lure-glow-mid {
+  transform-origin: 155px 65px;
+  animation: pulse-glow-mid 2s ease-in-out infinite;
+}
+
+@keyframes float-fish {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.15;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.45;
+  }
+}
+
+@keyframes pulse-glow-mid {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.8;
+  }
 }

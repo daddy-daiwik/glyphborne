@@ -16,14 +16,20 @@ export class MainMenu extends Scene {
   overlayCol1Title: Phaser.GameObjects.Text | null = null;
   overlayCol2Title: Phaser.GameObjects.Text | null = null;
   overlayCol3Title: Phaser.GameObjects.Text | null = null;
+  overlayCol4Title: Phaser.GameObjects.Text | null = null;
+  overlayCol5Title: Phaser.GameObjects.Text | null = null;
   overlayCol1List: Phaser.GameObjects.Text | null = null;
   overlayCol2List: Phaser.GameObjects.Text | null = null;
   overlayCol3List: Phaser.GameObjects.Text | null = null;
+  overlayCol4List: Phaser.GameObjects.Text | null = null;
+  overlayCol5List: Phaser.GameObjects.Text | null = null;
   overlayCloseButton: Phaser.GameObjects.Text | null = null;
 
   tabDepthBtn: Phaser.GameObjects.Text | null = null;
+  tabTridentBtn: Phaser.GameObjects.Text | null = null;
   tabLightningBtn: Phaser.GameObjects.Text | null = null;
   tabNovaBtn: Phaser.GameObjects.Text | null = null;
+  tabPoisonBtn: Phaser.GameObjects.Text | null = null;
   selectedTab: number = 0;
 
   leaderboardsData: LeaderboardsData | null = null;
@@ -46,15 +52,21 @@ export class MainMenu extends Scene {
     this.overlayBgGraphics = null;
     this.overlayHeader = null;
     this.tabDepthBtn = null;
+    this.tabTridentBtn = null;
     this.tabLightningBtn = null;
     this.tabNovaBtn = null;
+    this.tabPoisonBtn = null;
     this.selectedTab = 0;
     this.overlayCol1Title = null;
     this.overlayCol2Title = null;
     this.overlayCol3Title = null;
+    this.overlayCol4Title = null;
+    this.overlayCol5Title = null;
     this.overlayCol1List = null;
     this.overlayCol2List = null;
     this.overlayCol3List = null;
+    this.overlayCol4List = null;
+    this.overlayCol5List = null;
     this.overlayCloseButton = null;
     this.leaderboardsData = null;
   }
@@ -140,18 +152,29 @@ export class MainMenu extends Scene {
     // Tab buttons
     this.tabDepthBtn = this.add.text(0, 0, 'SCORE', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: '14px',
       color: '#ffd740',
       stroke: '#000000',
-      strokeThickness: 4,
+      strokeThickness: 3.5,
       align: 'center',
       resolution: 2,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.leaderboardContainer.add(this.tabDepthBtn);
 
+    this.tabTridentBtn = this.add.text(0, 0, 'TRIDENT', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
+      align: 'center',
+      resolution: 2,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.leaderboardContainer.add(this.tabTridentBtn);
+
     this.tabLightningBtn = this.add.text(0, 0, 'LIGHTNING', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: '14px',
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 3,
@@ -162,7 +185,7 @@ export class MainMenu extends Scene {
 
     this.tabNovaBtn = this.add.text(0, 0, 'NOVA', {
       fontFamily: 'Arial, sans-serif',
-      fontSize: '15px',
+      fontSize: '14px',
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 3,
@@ -171,56 +194,81 @@ export class MainMenu extends Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.leaderboardContainer.add(this.tabNovaBtn);
 
+    this.tabPoisonBtn = this.add.text(0, 0, 'POISON', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
+      align: 'center',
+      resolution: 2,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.leaderboardContainer.add(this.tabPoisonBtn);
+
     // Tab click handlers
-    this.tabDepthBtn.on('pointerdown', () => {
-      this.selectedTab = 0;
-      this.refreshLayout();
-    });
-    this.tabLightningBtn.on('pointerdown', () => {
-      this.selectedTab = 1;
-      this.refreshLayout();
-    });
-    this.tabNovaBtn.on('pointerdown', () => {
-      this.selectedTab = 2;
-      this.refreshLayout();
-    });
+    this.tabDepthBtn.on('pointerdown', () => { this.selectedTab = 0; this.refreshLayout(); });
+    this.tabTridentBtn.on('pointerdown', () => { this.selectedTab = 1; this.refreshLayout(); });
+    this.tabLightningBtn.on('pointerdown', () => { this.selectedTab = 2; this.refreshLayout(); });
+    this.tabNovaBtn.on('pointerdown', () => { this.selectedTab = 3; this.refreshLayout(); });
+    this.tabPoisonBtn.on('pointerdown', () => { this.selectedTab = 4; this.refreshLayout(); });
 
     // Columns title inside overlay
-    this.overlayCol1Title = this.add.text(0, 0, 'TOP DEPTH', {
+    this.overlayCol1Title = this.add.text(0, 0, 'TOP SCORE (DEPTH)', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
       color: '#4fc3f7',
       stroke: '#000000',
-      strokeThickness: 3,
+      strokeThickness: 3.5,
       align: 'center',
       resolution: 2,
     }).setOrigin(0.5);
     this.leaderboardContainer.add(this.overlayCol1Title);
 
-    this.overlayCol2Title = this.add.text(0, 0, 'TOP LIGHTNING', {
+    this.overlayCol2Title = this.add.text(0, 0, 'TOP TRIDENT CHAIN', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
-      color: '#ffd740',
+      color: '#00e5ff',
       stroke: '#000000',
-      strokeThickness: 3,
+      strokeThickness: 3.5,
       align: 'center',
       resolution: 2,
     }).setOrigin(0.5);
     this.leaderboardContainer.add(this.overlayCol2Title);
 
-    this.overlayCol3Title = this.add.text(0, 0, 'TOP NOVA', {
+    this.overlayCol3Title = this.add.text(0, 0, 'TOP LIGHTNING CHAIN', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '18px',
-      color: '#e040fb',
+      color: '#ffd740',
       stroke: '#000000',
-      strokeThickness: 3,
+      strokeThickness: 3.5,
       align: 'center',
       resolution: 2,
     }).setOrigin(0.5);
     this.leaderboardContainer.add(this.overlayCol3Title);
 
-    // Lists
-    this.overlayCol1List = this.add.text(0, 0, 'Loading...', {
+    this.overlayCol4Title = this.add.text(0, 0, 'TOP NOVA CHAIN', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      color: '#e040fb',
+      stroke: '#000000',
+      strokeThickness: 3.5,
+      align: 'center',
+      resolution: 2,
+    }).setOrigin(0.5);
+    this.leaderboardContainer.add(this.overlayCol4Title);
+
+    this.overlayCol5Title = this.add.text(0, 0, 'TOP POISON CHAIN', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      color: '#44ff44',
+      stroke: '#000000',
+      strokeThickness: 3.5,
+      align: 'center',
+      resolution: 2,
+    }).setOrigin(0.5);
+    this.leaderboardContainer.add(this.overlayCol5Title);
+
+    const listStyle = {
       fontFamily: 'monospace',
       fontSize: '14px',
       color: '#ffffff',
@@ -229,32 +277,23 @@ export class MainMenu extends Scene {
       align: 'left',
       lineSpacing: 6,
       resolution: 2,
-    }).setOrigin(0.5, 0);
+    };
+
+    // Lists
+    this.overlayCol1List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
     this.leaderboardContainer.add(this.overlayCol1List);
 
-    this.overlayCol2List = this.add.text(0, 0, 'Loading...', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2.2,
-      align: 'left',
-      lineSpacing: 6,
-      resolution: 2,
-    }).setOrigin(0.5, 0);
+    this.overlayCol2List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
     this.leaderboardContainer.add(this.overlayCol2List);
 
-    this.overlayCol3List = this.add.text(0, 0, 'Loading...', {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 2.2,
-      align: 'left',
-      lineSpacing: 6,
-      resolution: 2,
-    }).setOrigin(0.5, 0);
+    this.overlayCol3List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
     this.leaderboardContainer.add(this.overlayCol3List);
+
+    this.overlayCol4List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
+    this.leaderboardContainer.add(this.overlayCol4List);
+
+    this.overlayCol5List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
+    this.leaderboardContainer.add(this.overlayCol5List);
 
     // Close button
     this.overlayCloseButton = this.add.text(0, 0, 'CLOSE', {
@@ -286,6 +325,8 @@ export class MainMenu extends Scene {
     if (this.overlayCol1List) this.overlayCol1List.setText('Loading...');
     if (this.overlayCol2List) this.overlayCol2List.setText('Loading...');
     if (this.overlayCol3List) this.overlayCol3List.setText('Loading...');
+    if (this.overlayCol4List) this.overlayCol4List.setText('Loading...');
+    if (this.overlayCol5List) this.overlayCol5List.setText('Loading...');
 
     fetch('/api/leaderboard')
       .then((res) => res.json() as Promise<LeaderboardGetResponse>)
@@ -317,19 +358,35 @@ export class MainMenu extends Scene {
     });
     if (this.overlayCol1List) this.overlayCol1List.setText(scoreLines || 'No entries yet');
 
+    let tridentLines = '';
+    const tridentData = this.leaderboardsData.trident || [];
+    tridentData.forEach((entry: LeaderboardEntry, i: number) => {
+      const name = entry.username.substring(0, maxNameLen);
+      tridentLines += `#${i + 1} ${name} ${entry.score}\n`;
+    });
+    if (this.overlayCol2List) this.overlayCol2List.setText(tridentLines || 'No entries yet');
+
     let lightningLines = '';
     this.leaderboardsData.lightning.forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
       lightningLines += `#${i + 1} ${name} ${entry.score}\n`;
     });
-    if (this.overlayCol2List) this.overlayCol2List.setText(lightningLines || 'No entries yet');
+    if (this.overlayCol3List) this.overlayCol3List.setText(lightningLines || 'No entries yet');
 
     let novaLines = '';
     this.leaderboardsData.nova.forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
       novaLines += `#${i + 1} ${name} ${entry.score}\n`;
     });
-    if (this.overlayCol3List) this.overlayCol3List.setText(novaLines || 'No entries yet');
+    if (this.overlayCol4List) this.overlayCol4List.setText(novaLines || 'No entries yet');
+
+    let poisonLines = '';
+    const poisonData = this.leaderboardsData.poison || [];
+    poisonData.forEach((entry: LeaderboardEntry, i: number) => {
+      const name = entry.username.substring(0, maxNameLen);
+      poisonLines += `#${i + 1} ${name} ${entry.score}\n`;
+    });
+    if (this.overlayCol5List) this.overlayCol5List.setText(poisonLines || 'No entries yet');
 
     this.refreshLayout();
   }
@@ -338,6 +395,8 @@ export class MainMenu extends Scene {
     if (this.overlayCol1List) this.overlayCol1List.setText('Unavailable');
     if (this.overlayCol2List) this.overlayCol2List.setText('Unavailable');
     if (this.overlayCol3List) this.overlayCol3List.setText('Unavailable');
+    if (this.overlayCol4List) this.overlayCol4List.setText('Unavailable');
+    if (this.overlayCol5List) this.overlayCol5List.setText('Unavailable');
   }
 
   private refreshLayout(): void {
@@ -416,33 +475,45 @@ export class MainMenu extends Scene {
 
     // ── Tab buttons placement
     const tabY = height * 0.23;
-    const tabGap = isMobile ? 75 : 125;
-    
+    const tabGap = isMobile ? 55 : 85;
+
     if (this.tabDepthBtn) {
-      this.tabDepthBtn.setPosition(midX - tabGap, tabY);
-      this.tabDepthBtn.setFontSize(isMobile ? '12px' : '15px');
+      this.tabDepthBtn.setPosition(midX - tabGap * 2, tabY);
+      this.tabDepthBtn.setFontSize(isMobile ? '10px' : '13px');
       this.tabDepthBtn.setColor(this.selectedTab === 0 ? '#ffd740' : '#ffffff');
-      this.tabDepthBtn.setStroke('#000000', this.selectedTab === 0 ? 4 : 2);
+      this.tabDepthBtn.setStroke('#000000', this.selectedTab === 0 ? 3.5 : 2);
+    }
+    if (this.tabTridentBtn) {
+      this.tabTridentBtn.setPosition(midX - tabGap, tabY);
+      this.tabTridentBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabTridentBtn.setColor(this.selectedTab === 1 ? '#ffd740' : '#ffffff');
+      this.tabTridentBtn.setStroke('#000000', this.selectedTab === 1 ? 3.5 : 2);
     }
     if (this.tabLightningBtn) {
       this.tabLightningBtn.setPosition(midX, tabY);
-      this.tabLightningBtn.setFontSize(isMobile ? '12px' : '15px');
-      this.tabLightningBtn.setColor(this.selectedTab === 1 ? '#ffd740' : '#ffffff');
-      this.tabLightningBtn.setStroke('#000000', this.selectedTab === 1 ? 4 : 2);
+      this.tabLightningBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabLightningBtn.setColor(this.selectedTab === 2 ? '#ffd740' : '#ffffff');
+      this.tabLightningBtn.setStroke('#000000', this.selectedTab === 2 ? 3.5 : 2);
     }
     if (this.tabNovaBtn) {
       this.tabNovaBtn.setPosition(midX + tabGap, tabY);
-      this.tabNovaBtn.setFontSize(isMobile ? '12px' : '15px');
-      this.tabNovaBtn.setColor(this.selectedTab === 2 ? '#ffd740' : '#ffffff');
-      this.tabNovaBtn.setStroke('#000000', this.selectedTab === 2 ? 4 : 2);
+      this.tabNovaBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabNovaBtn.setColor(this.selectedTab === 3 ? '#ffd740' : '#ffffff');
+      this.tabNovaBtn.setStroke('#000000', this.selectedTab === 3 ? 3.5 : 2);
+    }
+    if (this.tabPoisonBtn) {
+      this.tabPoisonBtn.setPosition(midX + tabGap * 2, tabY);
+      this.tabPoisonBtn.setFontSize(isMobile ? '10px' : '13px');
+      this.tabPoisonBtn.setColor(this.selectedTab === 4 ? '#ffd740' : '#ffffff');
+      this.tabPoisonBtn.setStroke('#000000', this.selectedTab === 4 ? 3.5 : 2);
     }
 
     // Centered columns title & list
     const lbTitleY = height * 0.31;
     const lbListY = lbTitleY + 24;
 
-    const titleSize = isMobile ? '13px' : '18px';
-    const listSize = isMobile ? '12px' : '15px';
+    const titleSize = isMobile ? '12px' : '16px';
+    const listSize = isMobile ? '11px' : '14px';
     const listSpacing = isMobile ? 5 : 7;
 
     // Col 1: Depth (selectedTab === 0)
@@ -458,7 +529,7 @@ export class MainMenu extends Scene {
       this.overlayCol1List.setVisible(this.selectedTab === 0);
     }
 
-    // Col 2: Lightning (selectedTab === 1)
+    // Col 2: Trident (selectedTab === 1)
     if (this.overlayCol2Title) {
       this.overlayCol2Title.setPosition(midX, lbTitleY);
       this.overlayCol2Title.setFontSize(titleSize);
@@ -471,7 +542,7 @@ export class MainMenu extends Scene {
       this.overlayCol2List.setVisible(this.selectedTab === 1);
     }
 
-    // Col 3: Nova (selectedTab === 2)
+    // Col 3: Lightning (selectedTab === 2)
     if (this.overlayCol3Title) {
       this.overlayCol3Title.setPosition(midX, lbTitleY);
       this.overlayCol3Title.setFontSize(titleSize);
@@ -482,6 +553,32 @@ export class MainMenu extends Scene {
       this.overlayCol3List.setFontSize(listSize);
       this.overlayCol3List.setLineSpacing(listSpacing);
       this.overlayCol3List.setVisible(this.selectedTab === 2);
+    }
+
+    // Col 4: Nova (selectedTab === 3)
+    if (this.overlayCol4Title) {
+      this.overlayCol4Title.setPosition(midX, lbTitleY);
+      this.overlayCol4Title.setFontSize(titleSize);
+      this.overlayCol4Title.setVisible(this.selectedTab === 3);
+    }
+    if (this.overlayCol4List) {
+      this.overlayCol4List.setPosition(midX, lbListY);
+      this.overlayCol4List.setFontSize(listSize);
+      this.overlayCol4List.setLineSpacing(listSpacing);
+      this.overlayCol4List.setVisible(this.selectedTab === 3);
+    }
+
+    // Col 5: Poison (selectedTab === 4)
+    if (this.overlayCol5Title) {
+      this.overlayCol5Title.setPosition(midX, lbTitleY);
+      this.overlayCol5Title.setFontSize(titleSize);
+      this.overlayCol5Title.setVisible(this.selectedTab === 4);
+    }
+    if (this.overlayCol5List) {
+      this.overlayCol5List.setPosition(midX, lbListY);
+      this.overlayCol5List.setFontSize(listSize);
+      this.overlayCol5List.setLineSpacing(listSpacing);
+      this.overlayCol5List.setVisible(this.selectedTab === 4);
     }
 
     // Overlay Close Button

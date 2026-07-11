@@ -149,18 +149,22 @@ api.get('/leaderboard', async (c) => {
       return [];
     };
 
-    const [scoreList, lightningList, novaList] = await Promise.all([
+    const [scoreList, tridentList, lightningList, novaList, poisonList] = await Promise.all([
       fetchCategory('leaderboard_score'),
+      fetchCategory('leaderboard_trident'),
       fetchCategory('leaderboard_lightning'),
       fetchCategory('leaderboard_nova'),
+      fetchCategory('leaderboard_poison'),
     ]);
 
     return c.json<LeaderboardGetResponse>({
       status: 'success',
       leaderboards: {
         score: scoreList,
+        trident: tridentList,
         lightning: lightningList,
         nova: novaList,
+        poison: poisonList,
       },
     });
   } catch (error) {
@@ -171,10 +175,12 @@ api.get('/leaderboard', async (c) => {
 
 api.post('/leaderboard', async (c) => {
   try {
-    const { score, lightningChain, novaChain } = await c.req.json<{
+    const { score, tridentChain, lightningChain, novaChain, poisonChain } = await c.req.json<{
       score: number;
+      tridentChain: number;
       lightningChain: number;
       novaChain: number;
+      poisonChain: number;
     }>();
 
     const username = (await reddit.getCurrentUsername()) ?? 'anonymous';
@@ -194,23 +200,20 @@ api.post('/leaderboard', async (c) => {
       // Check if qualifies
       const lowestScore = list.length >= 10 ? list[list.length - 1]!.score : -1;
       if (value > lowestScore || list.length < 10) {
-        // If username already has an entry, should we update or allow multiple entries?
-        // "Update top 10 entries stored as JSON array... if the current score beats the lowest in the top 10 or if fewer than 10 entries exist."
-        // We just add a new entry, sort, and slice to keep top 10.
         list.push({ username, score: value, timestamp });
-        // Sort descending
         list.sort((a, b) => b.score - a.score);
-        // Limit to top 10
         list = list.slice(0, 10);
         await redis.set(key, JSON.stringify(list));
       }
       return list;
     };
 
-    const [updatedScore, updatedLightning, updatedNova] = await Promise.all([
+    const [updatedScore, updatedTrident, updatedLightning, updatedNova, updatedPoison] = await Promise.all([
       updateCategory('leaderboard_score', score),
+      updateCategory('leaderboard_trident', tridentChain ?? 0),
       updateCategory('leaderboard_lightning', lightningChain),
       updateCategory('leaderboard_nova', novaChain),
+      updateCategory('leaderboard_poison', poisonChain ?? 0),
     ]);
 
     return c.json<LeaderboardPostResponse>({
@@ -218,8 +221,10 @@ api.post('/leaderboard', async (c) => {
       username,
       leaderboards: {
         score: updatedScore,
+        trident: updatedTrident,
         lightning: updatedLightning,
         nova: updatedNova,
+        poison: updatedPoison,
       },
     });
   } catch (error) {
