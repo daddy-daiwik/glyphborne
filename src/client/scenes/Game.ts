@@ -25,6 +25,7 @@ type FXRing = {
   alpha: number;
   life: number;
   maxLife: number;
+  isFilled?: boolean;
 };
 
 type EnemyKind = 'current' | 'zombie' | 'attacker' | 'buff';
@@ -53,6 +54,7 @@ type Enemy = {
   spawnTime?: number;
   baseX?: number;
   baseY?: number;
+  color?: number;
 };
 
 type Projectile = {
@@ -136,6 +138,20 @@ const CURRENT_SPAWN_WEIGHT = 40;
 const ZOMBIE_SPAWN_WEIGHT = 20;
 const ATTACKER_SPAWN_WEIGHT = 25;
 
+const ENEMY_COLORS = [
+  0xff1744, // Bright Red
+  0xf50057, // Bright Pink
+  0xd500f9, // Bright Purple
+  0x651fff, // Bright Violet
+  0x3d5afe, // Bright Indigo
+  0x2979ff, // Bright Blue
+  0x00e5ff, // Bright Cyan
+  0x1de9b6, // Bright Teal
+  0x00e676, // Bright Green
+  0xffea00, // Bright Yellow
+  0xff9100, // Bright Orange
+];
+
 // HP bar — bottom-left
 const HP_BAR_WIDTH = 220;
 const HP_BAR_HEIGHT = 16;
@@ -190,13 +206,13 @@ const COMBOS: ComboDefinition[] = [
 
 const TRIDENT_SPEED = 650;
 const TRIDENT_DAMAGE = 35;
-const NOVA_RADIUS = 150;
-const NOVA_DAMAGE = 50;
+const NOVA_RADIUS = 160;
+const NOVA_DAMAGE = 300;
 const NOVA_DURATION = 450;
 const LIGHTNING_DAMAGE = 40;
-const POISON_RANGE = 300;
-const POISON_CONE_HALF_ANGLE = Math.PI / 6; // 30 deg = 60 deg total
-const POISON_DAMAGE_CLOSE = 60;
+const POISON_RANGE = 200;
+const POISON_CONE_HALF_ANGLE = Math.PI / 6; // 30 deg = 60 deg total opening
+const POISON_DAMAGE_CLOSE = 100;
 // POISON_DAMAGE_FAR removed — damage falloff computed inline via distRatio
 
 const POISON_WAVES = 5;
@@ -1182,10 +1198,10 @@ export class Game extends Scene {
     e.graphics.setRotation(heading);
 
     switch (e.kind) {
-      case 'current': this.drawCurrentEnemy(e.graphics, 0, 0, e.radius, e.shape!); break;
-      case 'zombie': this.drawZombieEnemy(e.graphics, e.radius); break;
-      case 'attacker': this.drawAttackerEnemy(e.graphics, e.radius); break;
-      case 'buff': this.drawBuffEnemy(e.graphics, e.radius); break;
+      case 'current': this.drawCurrentEnemy(e.graphics, 0, 0, e.radius, e.shape!, e.color || 0xff6600); break;
+      case 'zombie': this.drawZombieEnemy(e.graphics, e.radius, e.color || 0x00ff66); break;
+      case 'attacker': this.drawAttackerEnemy(e.graphics, e.radius, e.color || 0xff4422); break;
+      case 'buff': this.drawBuffEnemy(e.graphics, e.radius, e.color || 0xffd740); break;
     }
 
     const isFlashing = this.gameTime < (e.hitFlashTime || 0);
@@ -1506,6 +1522,7 @@ export class Game extends Scene {
       spawnTime: this.gameTime,
       baseX: x,
       baseY: y,
+      color: ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)] || 0xff6600,
     };
     this.enemies.push(enemy);
     this.redrawEnemy(enemy);
@@ -1548,6 +1565,7 @@ export class Game extends Scene {
       hp: ENEMY_HP.zombie, slowTimer: 0,
       dirX, dirY, nextDirTimer: 2500,
       damageMin: ZOMBIE_DAMAGE, damageMax: ZOMBIE_DAMAGE,
+      color: ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)] || 0x00ff66,
     };
     this.enemies.push(enemy);
     this.redrawEnemy(enemy);
@@ -1570,6 +1588,7 @@ export class Game extends Scene {
       nextDirTimer: 2000, movementMode,
       projectileTimer: ATTACKER_PROJECTILE_INTERVAL_MIN + Math.random() * (ATTACKER_PROJECTILE_INTERVAL_MAX - ATTACKER_PROJECTILE_INTERVAL_MIN),
       damageMin: ATTACKER_DAMAGE_MIN, damageMax: ATTACKER_DAMAGE_MAX,
+      color: ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)] || 0xff4422,
     };
     this.enemies.push(enemy);
     this.redrawEnemy(enemy);
@@ -1590,6 +1609,7 @@ export class Game extends Scene {
       dirX: (Math.random() - 0.5) * 0.4,
       dirY: 1,
       nextDirTimer: 1500, buffKind,
+      color: 0xffd740,
     };
     this.enemies.push(enemy);
     this.redrawEnemy(enemy);
@@ -1597,12 +1617,12 @@ export class Game extends Scene {
 
   // ─── Enemy draw functions ────────────────────────────────────────────────────
 
-  drawCurrentEnemy(g: Phaser.GameObjects.Graphics, cx: number, cy: number, radius: number, shape: Shape): void {
+  drawCurrentEnemy(g: Phaser.GameObjects.Graphics, cx: number, cy: number, radius: number, shape: Shape, bodyColor: number): void {
     const heading = Math.PI / 2;
     switch (shape) {
-      case 'triangle': this.drawSmallFish(g, cx, cy, radius, 0xff6600, 0xffffff, heading); break;
-      case 'circle': this.drawSmallFish(g, cx, cy, radius, 0x1565c0, 0xffee58, heading); break;
-      case 'square': this.drawSmallFish(g, cx, cy, radius, 0xab47bc, 0xfff176, heading); break;
+      case 'triangle': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffffff, heading); break;
+      case 'circle': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffee58, heading); break;
+      case 'square': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xfff176, heading); break;
     }
   }
 
@@ -1674,15 +1694,14 @@ export class Game extends Scene {
     g.fillCircle(eyeX - 0.4, cy + eyeYOffset + 0.4, 0.8);
   }
 
-
-  drawZombieEnemy(g: Phaser.GameObjects.Graphics, r: number): void {
+  drawZombieEnemy(g: Phaser.GameObjects.Graphics, r: number, bodyColor: number): void {
     // Soft neon green glow
-    g.fillStyle(0x00ff66, 0.15);
+    g.fillStyle(bodyColor, 0.15);
     g.fillCircle(0, 0, r + 6);
 
-    // Dark green octagon/diamond body with neon green outline
-    g.fillStyle(0x1a4a2a, 1);
-    g.lineStyle(2, 0x00ff66, 1);
+    // Dark green octagon/diamond body with custom color outline
+    g.fillStyle(0x111111, 1);
+    g.lineStyle(2, bodyColor, 1);
     g.beginPath();
     g.moveTo(0, -r);
     g.lineTo(r * 0.8, -r * 0.4);
@@ -1697,7 +1716,7 @@ export class Game extends Scene {
     g.strokePath();
 
     // Inner glowing core
-    g.fillStyle(0x00ff66, 0.7);
+    g.fillStyle(bodyColor, 0.7);
     g.fillCircle(0, 0, r * 0.42);
 
     // Neon eye dots (facing right / positive X)
@@ -1709,9 +1728,9 @@ export class Game extends Scene {
     g.fillCircle(r * 0.4, r * 0.22, 1.2);
   }
 
-  drawAttackerEnemy(g: Phaser.GameObjects.Graphics, r: number): void {
+  drawAttackerEnemy(g: Phaser.GameObjects.Graphics, r: number, bodyColor: number): void {
     // Soft neon red/orange glow
-    g.fillStyle(0xff4422, 0.15);
+    g.fillStyle(bodyColor, 0.15);
     g.fillCircle(0, 0, r + 6);
 
     // Spiky spikestar/arrowhead pointing right (positive X)
@@ -1736,14 +1755,14 @@ export class Game extends Scene {
     g.fillCircle(r * 0.3, r * 0.2, 2.2);
   }
 
-  drawBuffEnemy(g: Phaser.GameObjects.Graphics, r: number): void {
+  drawBuffEnemy(g: Phaser.GameObjects.Graphics, r: number, bodyColor: number): void {
     // Golden glow
-    g.fillStyle(0xffd740, 0.2);
+    g.fillStyle(bodyColor, 0.2);
     g.fillCircle(0, 0, r + 8);
 
     // Outer golden hexagon
-    g.fillStyle(0x3e3208, 1);
-    g.lineStyle(2.5, 0xffd740, 1);
+    g.fillStyle(0x111111, 1);
+    g.lineStyle(2.5, bodyColor, 1);
     g.beginPath();
     for (let i = 0; i < 6; i++) {
       const angle = (i * Math.PI) / 3;
@@ -2134,18 +2153,54 @@ export class Game extends Scene {
         break;
       }
       case 'nova': {
+        // Vibrate/shake camera on explosion
+        this.cameras.main.shake(250, 0.015);
+
+        // Visual effects: 2 expanding rings + 1 semi-transparent filled frost circle
         this.fxRings.push({
-          x: this.playerX, y: this.playerY,
+          x: mx, y: my,
           radius: 10, maxRadius: NOVA_RADIUS,
-          color: SPELL_COLORS.nova,
+          color: 0xffffff, // Inner bright core ring
           alpha: 1.0, life: 0, maxLife: NOVA_DURATION,
         });
+        this.fxRings.push({
+          x: mx, y: my,
+          radius: 20, maxRadius: NOVA_RADIUS + 20,
+          color: SPELL_COLORS.nova, // Outer frost ring
+          alpha: 0.8, life: 0, maxLife: NOVA_DURATION + 100,
+        });
+        this.fxRings.push({
+          x: mx, y: my,
+          radius: 5, maxRadius: NOVA_RADIUS,
+          color: SPELL_COLORS.nova,
+          alpha: 0.25, life: 0, maxLife: NOVA_DURATION,
+          isFilled: true, // Semi-transparent filled frost region!
+        });
 
+        // Spawn 25 expanding frost particles from the click center
+        for (let p = 0; p < 25; p++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 80 + Math.random() * 120;
+          this.fxParticles.push({
+            x: mx,
+            y: my,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            color: p % 2 === 0 ? 0xffffff : 0x88ccff,
+            shape: Math.random() < 0.5 ? 'circle' : 'star',
+            alpha: 0.9,
+            size: 2 + Math.random() * 5,
+            life: 0,
+            maxLife: 400 + Math.random() * 300,
+          });
+        }
+
+        // Damage all enemies inside the circular region centered at (mx, my)
         const list = [...this.enemies];
         let hitCount = 0;
         for (let i = list.length - 1; i >= 0; i--) {
           const e = list[i]!;
-          const d = Phaser.Math.Distance.Between(this.playerX, this.playerY, e.x, e.y);
+          const d = Phaser.Math.Distance.Between(mx, my, e.x, e.y);
           if (d <= NOVA_RADIUS) {
             const idx = this.enemies.indexOf(e);
             if (idx !== -1) {
@@ -2305,9 +2360,12 @@ export class Game extends Scene {
 
           if (Math.abs(angleDiff) > POISON_CONE_HALF_ANGLE) continue;
 
-          // Damage falloff: 100% at 0, 50% at max range
-          const distRatio = dist / POISON_RANGE;
-          const damage = POISON_DAMAGE_CLOSE * (1 - distRatio * 0.5);
+          let damage = 0;
+          if (dist <= 100) {
+            damage = POISON_DAMAGE_CLOSE;
+          } else {
+            damage = POISON_DAMAGE_CLOSE * (1 - (dist - 100) / (POISON_RANGE - 100));
+          }
 
           const idx = this.enemies.indexOf(e);
           if (idx !== -1) {
@@ -2650,8 +2708,13 @@ export class Game extends Scene {
       const t = Math.min(1.0, r.life / r.maxLife);
       const currentRadius = r.radius + (r.maxRadius - r.radius) * t;
       const alpha = r.alpha * (1.0 - t);
-      this.fxGraphics.lineStyle(2.5, r.color, alpha);
-      this.fxGraphics.strokeCircle(r.x, r.y, currentRadius);
+      if (r.isFilled) {
+        this.fxGraphics.fillStyle(r.color, alpha);
+        this.fxGraphics.fillCircle(r.x, r.y, currentRadius);
+      } else {
+        this.fxGraphics.lineStyle(2.5, r.color, alpha);
+        this.fxGraphics.strokeCircle(r.x, r.y, currentRadius);
+      }
     }
 
     for (let i = this.fxParticles.length - 1; i >= 0; i--) {
@@ -2813,8 +2876,10 @@ export class Game extends Scene {
     this.time.delayedCall(800, () => {
       this.scene.start('GameOver', {
         score: Math.floor(this.score),
+        bestTridentChain: this.bestTridentChain,
         bestLightningChain: this.bestLightningChain,
         bestNovaChain: this.bestNovaChain,
+        bestPoisonChain: this.bestPoisonChain,
       });
     });
   }

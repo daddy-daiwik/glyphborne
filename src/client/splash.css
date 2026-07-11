@@ -16,6 +16,7 @@
   background-color: #7acaf3; /* Solid pastel blue matching game-over screen */
   overflow: hidden;
   padding: 16px;
+  padding-bottom: 80px; /* Push content up to avoid footer overlap */
 }
 
 /* Flat background bubbles/circles matching the game feel */
@@ -105,7 +106,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: #0d2847; /* Solid deep blue */
+  background: #7f6ad8; /* Beautiful cartoonish pastel violet */
   border: 3.5px solid #000000;
   border-radius: 16px;
   padding: 20px;

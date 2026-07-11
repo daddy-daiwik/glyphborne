@@ -27,24 +27,15 @@ export class GameOver extends Scene {
   panelGraphics: Phaser.GameObjects.Graphics | null = null;
 
   gameover_text: Phaser.GameObjects.Text | null = null;
+  scoreText: Phaser.GameObjects.Text | null = null;
 
-  // Stats display
+  // Stats display rows
   panelTitleText: Phaser.GameObjects.Text | null = null;
-  col1TitleText: Phaser.GameObjects.Text | null = null;
-  col2TitleText: Phaser.GameObjects.Text | null = null;
-  col3TitleText: Phaser.GameObjects.Text | null = null;
-
-  col1CurrentText: Phaser.GameObjects.Text | null = null;
-  col2CurrentText: Phaser.GameObjects.Text | null = null;
-  col3CurrentText: Phaser.GameObjects.Text | null = null;
-
-  col1TopText: Phaser.GameObjects.Text | null = null;
-  col2TopText: Phaser.GameObjects.Text | null = null;
-  col3TopText: Phaser.GameObjects.Text | null = null;
-
-  col1RecordText: Phaser.GameObjects.Text | null = null;
-  col2RecordText: Phaser.GameObjects.Text | null = null;
-  col3RecordText: Phaser.GameObjects.Text | null = null;
+  rowScoreText: Phaser.GameObjects.Text | null = null;
+  rowTridentText: Phaser.GameObjects.Text | null = null;
+  rowLightningText: Phaser.GameObjects.Text | null = null;
+  rowNovaText: Phaser.GameObjects.Text | null = null;
+  rowPoisonText: Phaser.GameObjects.Text | null = null;
 
   // Buttons
   viewLeaderboardsButton: Phaser.GameObjects.Text | null = null;
@@ -94,19 +85,13 @@ export class GameOver extends Scene {
     this.leaderboardsData = null;
 
     this.gameover_text = null;
+    this.scoreText = null;
     this.panelTitleText = null;
-    this.col1TitleText = null;
-    this.col2TitleText = null;
-    this.col3TitleText = null;
-    this.col1CurrentText = null;
-    this.col2CurrentText = null;
-    this.col3CurrentText = null;
-    this.col1TopText = null;
-    this.col2TopText = null;
-    this.col3TopText = null;
-    this.col1RecordText = null;
-    this.col2RecordText = null;
-    this.col3RecordText = null;
+    this.rowScoreText = null;
+    this.rowTridentText = null;
+    this.rowLightningText = null;
+    this.rowNovaText = null;
+    this.rowPoisonText = null;
     this.viewLeaderboardsButton = null;
     this.playAgainButton = null;
     this.leaderboardContainer = null;
@@ -132,54 +117,36 @@ export class GameOver extends Scene {
       .text(0, 0, 'GAME OVER', txt('44px', '#ff5252', 8))
       .setOrigin(0.5);
 
+    // ── Score text below title
+    this.scoreText = this.add
+      .text(0, 0, `SCORE: ${this.finalScore}`, txt('26px', '#ffffff', 6))
+      .setOrigin(0.5);
+
     // ── Stats panel header
     this.panelTitleText = this.add
       .text(0, 0, 'RUN STATISTICS', txt('18px', '#ffffff', 6))
       .setOrigin(0.5);
 
-    // ── Column titles
-    this.col1TitleText = this.add
-      .text(0, 0, 'DEPTH', txt('16px', '#4fc3f7', 5))
-      .setOrigin(0.5);
-    this.col2TitleText = this.add
-      .text(0, 0, 'LIGHTNING', txt('16px', '#ffd740', 5))
-      .setOrigin(0.5);
-    this.col3TitleText = this.add
-      .text(0, 0, 'NOVA BURST', txt('16px', '#e040fb', 5))
+    // ── Stats Rows
+    this.rowScoreText = this.add
+      .text(0, 0, `TOTAL SCORE: ${this.finalScore}`, txt('16px', '#ffffff', 5))
       .setOrigin(0.5);
 
-    // ── Current run metrics
-    this.col1CurrentText = this.add
-      .text(0, 0, `Score: ${this.finalScore}`, txt('15px', '#ffffff', 5))
-      .setOrigin(0.5);
-    this.col2CurrentText = this.add
-      .text(0, 0, `Chain: ${this.bestLightningChain}`, txt('15px', '#ffffff', 5))
-      .setOrigin(0.5);
-    this.col3CurrentText = this.add
-      .text(0, 0, `Nova Hits: ${this.bestNovaChain}`, txt('15px', '#ffffff', 5))
+    this.rowTridentText = this.add
+      .text(0, 0, `TRIDENT CHAIN: ${this.bestTridentChain}`, txt('16px', '#ffd740', 5))
       .setOrigin(0.5);
 
-    // ── Top records fetched
-    this.col1TopText = this.add
-      .text(0, 0, 'Top: Fetching...', txt('13px', '#88aaff', 4))
-      .setOrigin(0.5);
-    this.col2TopText = this.add
-      .text(0, 0, 'Top: Fetching...', txt('13px', '#88aaff', 4))
-      .setOrigin(0.5);
-    this.col3TopText = this.add
-      .text(0, 0, 'Top: Fetching...', txt('13px', '#88aaff', 4))
+    this.rowLightningText = this.add
+      .text(0, 0, `LIGHTNING CHAIN: ${this.bestLightningChain}`, txt('16px', '#ff9100', 5))
       .setOrigin(0.5);
 
-    // ── New record labels (hidden by default)
-    this.col1RecordText = this.add
-      .text(0, 0, 'NEW RECORD!', txt('13px', '#00ff66', 5))
-      .setOrigin(0.5).setVisible(false);
-    this.col2RecordText = this.add
-      .text(0, 0, 'NEW RECORD!', txt('13px', '#00ff66', 5))
-      .setOrigin(0.5).setVisible(false);
-    this.col3RecordText = this.add
-      .text(0, 0, 'NEW RECORD!', txt('13px', '#00ff66', 5))
-      .setOrigin(0.5).setVisible(false);
+    this.rowNovaText = this.add
+      .text(0, 0, `NOVA HITS: ${this.bestNovaChain}`, txt('16px', '#e040fb', 5))
+      .setOrigin(0.5);
+
+    this.rowPoisonText = this.add
+      .text(0, 0, `POISON CHAIN: ${this.bestPoisonChain}`, txt('16px', '#00e676', 5))
+      .setOrigin(0.5);
 
     // ── Buttons
     this.viewLeaderboardsButton = this.add
@@ -350,26 +317,31 @@ export class GameOver extends Scene {
     if (!this.leaderboardsData) return;
 
     const topScore = this.leaderboardsData.score[0]?.score ?? 0;
+    const topTrident = this.leaderboardsData.trident[0]?.score ?? 0;
     const topLightning = this.leaderboardsData.lightning[0]?.score ?? 0;
     const topNova = this.leaderboardsData.nova[0]?.score ?? 0;
+    const topPoison = this.leaderboardsData.poison[0]?.score ?? 0;
 
-    if (this.col1TopText) this.col1TopText.setText(`Top: ${topScore}`);
-    if (this.col2TopText) this.col2TopText.setText(`Top: ${topLightning}`);
-    if (this.col3TopText) this.col3TopText.setText(`Top: ${topNova}`);
+    const isNewScore = this.finalScore >= topScore && this.finalScore > 0;
+    const isNewTrident = this.bestTridentChain >= topTrident && this.bestTridentChain > 0;
+    const isNewLightning = this.bestLightningChain >= topLightning && this.bestLightningChain > 0;
+    const isNewNova = this.bestNovaChain >= topNova && this.bestNovaChain > 0;
+    const isNewPoison = this.bestPoisonChain >= topPoison && this.bestPoisonChain > 0;
 
-    const recordsArr: Phaser.GameObjects.Text[] = [];
-    if (this.finalScore >= topScore && this.finalScore > 0) {
-      if (this.col1RecordText) { this.col1RecordText.setVisible(true); recordsArr.push(this.col1RecordText); }
+    if (this.rowScoreText) {
+      this.rowScoreText.setText(`TOTAL SCORE: ${this.finalScore}  (Top: ${topScore})${isNewScore ? '  🏆 NEW RECORD!' : ''}`);
     }
-    if (this.bestLightningChain >= topLightning && this.bestLightningChain > 0) {
-      if (this.col2RecordText) { this.col2RecordText.setVisible(true); recordsArr.push(this.col2RecordText); }
+    if (this.rowTridentText) {
+      this.rowTridentText.setText(`TRIDENT CHAIN: ${this.bestTridentChain}  (Top: ${topTrident})${isNewTrident ? '  🏆 NEW RECORD!' : ''}`);
     }
-    if (this.bestNovaChain >= topNova && this.bestNovaChain > 0) {
-      if (this.col3RecordText) { this.col3RecordText.setVisible(true); recordsArr.push(this.col3RecordText); }
+    if (this.rowLightningText) {
+      this.rowLightningText.setText(`LIGHTNING CHAIN: ${this.bestLightningChain}  (Top: ${topLightning})${isNewLightning ? '  🏆 NEW RECORD!' : ''}`);
     }
-
-    if (recordsArr.length > 0) {
-      this.tweens.add({ targets: recordsArr, alpha: 0.3, duration: 350, yoyo: true, repeat: -1 });
+    if (this.rowNovaText) {
+      this.rowNovaText.setText(`NOVA HITS: ${this.bestNovaChain}  (Top: ${topNova})${isNewNova ? '  🏆 NEW RECORD!' : ''}`);
+    }
+    if (this.rowPoisonText) {
+      this.rowPoisonText.setText(`POISON CHAIN: ${this.bestPoisonChain}  (Top: ${topPoison})${isNewPoison ? '  🏆 NEW RECORD!' : ''}`);
     }
 
     const width = this.scale.width;
@@ -417,9 +389,11 @@ export class GameOver extends Scene {
   }
 
   private displayErrorState(): void {
-    if (this.col1TopText) this.col1TopText.setText('Top: N/A');
-    if (this.col2TopText) this.col2TopText.setText('Top: N/A');
-    if (this.col3TopText) this.col3TopText.setText('Top: N/A');
+    if (this.rowScoreText) this.rowScoreText.setText(`TOTAL SCORE: ${this.finalScore}  (Top: N/A)`);
+    if (this.rowTridentText) this.rowTridentText.setText(`TRIDENT CHAIN: ${this.bestTridentChain}  (Top: N/A)`);
+    if (this.rowLightningText) this.rowLightningText.setText(`LIGHTNING CHAIN: ${this.bestLightningChain}  (Top: N/A)`);
+    if (this.rowNovaText) this.rowNovaText.setText(`NOVA HITS: ${this.bestNovaChain}  (Top: N/A)`);
+    if (this.rowPoisonText) this.rowPoisonText.setText(`POISON CHAIN: ${this.bestPoisonChain}  (Top: N/A)`);
   }
 
   private updateLayout(width: number, height: number): void {
@@ -443,15 +417,20 @@ export class GameOver extends Scene {
 
     // Game Over title
     if (this.gameover_text) {
-      this.gameover_text.setPosition(midX, height * 0.1);
+      this.gameover_text.setPosition(midX, height * 0.08);
       this.gameover_text.setScale(1);
     }
 
+    if (this.scoreText) {
+      this.scoreText.setPosition(midX, height * 0.14);
+      this.scoreText.setScale(1);
+    }
+
     // Main Stats Panel
-    const panelW = Math.min(Math.max(300, width * 0.88), 640);
-    const panelH = Math.min(height * 0.46, 260);
+    const panelW = Math.min(Math.max(300, width * 0.95), 680);
+    const panelH = Math.min(height * 0.44, 250);
     const panelX = midX - panelW / 2;
-    const panelY = height * 0.18;
+    const panelY = height * 0.20;
 
     if (this.panelGraphics) {
       this.panelGraphics.clear();
@@ -466,33 +445,16 @@ export class GameOver extends Scene {
       this.panelTitleText.setScale(1);
     }
 
-    // 3 columns inside panel
-    const col1X = midX - panelW * 0.3;
-    const col2X = midX;
-    const col3X = midX + panelW * 0.3;
-    const colY = panelY + 55;
-    const row1Y = colY + 26;
-    const row2Y = row1Y + 24;
-    const row3Y = row2Y + 22;
-
+    // Spaced vertically inside panel, centered horizontally
     const setPos = (t: Phaser.GameObjects.Text | null, x: number, y: number) => {
       if (t) { t.setPosition(x, y); t.setScale(1); }
     };
 
-    setPos(this.col1TitleText, col1X, colY);
-    setPos(this.col1CurrentText, col1X, row1Y);
-    setPos(this.col1TopText, col1X, row2Y);
-    setPos(this.col1RecordText, col1X, row3Y);
-
-    setPos(this.col2TitleText, col2X, colY);
-    setPos(this.col2CurrentText, col2X, row1Y);
-    setPos(this.col2TopText, col2X, row2Y);
-    setPos(this.col2RecordText, col2X, row3Y);
-
-    setPos(this.col3TitleText, col3X, colY);
-    setPos(this.col3CurrentText, col3X, row1Y);
-    setPos(this.col3TopText, col3X, row2Y);
-    setPos(this.col3RecordText, col3X, row3Y);
+    setPos(this.rowScoreText, midX, panelY + 58);
+    setPos(this.rowTridentText, midX, panelY + 92);
+    setPos(this.rowLightningText, midX, panelY + 126);
+    setPos(this.rowNovaText, midX, panelY + 160);
+    setPos(this.rowPoisonText, midX, panelY + 194);
 
     // Buttons below panel
     const isMobilePortrait = width < height && width < 600;
