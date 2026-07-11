@@ -768,25 +768,15 @@ export class Game extends Scene {
 
     const spotT = Math.sin(t * 0.006);
     g.fillStyle(0x00ffdd, 0.5 + spotT * 0.2);
+    // Symmetric pairs of spots on the body
     g.fillCircle(-rx * 0.2, -ry * 0.25, 2.5);
-    g.fillCircle(-rx * 0.05, ry * 0.28, 2.0);
-    g.fillCircle(-rx * 0.38, ry * 0.1, 1.8);
+    g.fillCircle(-rx * 0.2, ry * 0.25, 2.5);
     g.fillCircle(-rx * 0.42, -ry * 0.3, 1.5);
+    g.fillCircle(-rx * 0.42, ry * 0.3, 1.5);
 
+    // Symmetric side fins (left and right / top and bottom)
     g.fillStyle(0x005577, 1);
     g.lineStyle(1.5, 0x001a20, 1);
-    g.beginPath();
-    g.moveTo(-rx * 0.3, -ry);
-    g.lineTo(-rx * 0.55, -ry - 12);
-    g.lineTo(-rx * 0.1, -ry - 7);
-    g.lineTo(rx * 0.1, -ry - 14);
-    g.lineTo(rx * 0.28, -ry - 4);
-    g.lineTo(rx * 0.35, -ry);
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
-
-    g.fillStyle(0x005577, 1);
     g.beginPath();
     g.moveTo(-rx * 0.1, -ry * 0.7);
     g.lineTo(-rx * 0.6, -ry - 7);
@@ -822,29 +812,31 @@ export class Game extends Scene {
     g.fillStyle(0x001a0a, 1);
     g.fillEllipse(rx * 0.48, 0, rx * 0.38, ry * 0.45);
 
+    // Symmetric teeth: 3 pointing up from the center, 3 pointing down from the center
     g.fillStyle(0xeefff5, 1);
     g.lineStyle(1, 0x001a20, 1);
     for (let fi = 0; fi < 3; fi++) {
-      const fx = rx * 0.42 + fi * rx * 0.08;
+      const fx = rx * 0.40 + fi * rx * 0.08;
       g.beginPath();
-      g.moveTo(fx, -ry * 0.04);
-      g.lineTo(fx + rx * 0.04, ry * 0.14);
-      g.lineTo(fx + rx * 0.08, -ry * 0.04);
+      g.moveTo(fx, 0);
+      g.lineTo(fx + rx * 0.04, -ry * 0.14);
+      g.lineTo(fx + rx * 0.08, 0);
       g.closePath();
       g.fillPath();
       g.strokePath();
     }
-    for (let fi = 0; fi < 2; fi++) {
-      const fx = rx * 0.46 + fi * rx * 0.1;
+    for (let fi = 0; fi < 3; fi++) {
+      const fx = rx * 0.40 + fi * rx * 0.08;
       g.beginPath();
-      g.moveTo(fx, ry * 0.04);
-      g.lineTo(fx + rx * 0.04, -ry * 0.14);
-      g.lineTo(fx + rx * 0.08, ry * 0.04);
+      g.moveTo(fx, 0);
+      g.lineTo(fx + rx * 0.04, ry * 0.14);
+      g.lineTo(fx + rx * 0.08, 0);
       g.closePath();
       g.fillPath();
       g.strokePath();
     }
 
+    // Centered Lure Antenna starting at exactly y = 0
     const antStartX = rx * 0.55;
     const antAngle = Math.sin(t * 0.007) * 0.7;
     const antLen = 32;
@@ -852,9 +844,9 @@ export class Game extends Scene {
     const lureY = Math.sin(antAngle) * antLen;
 
     g.lineStyle(2.5, 0x001a20, 1);
-    g.lineBetween(antStartX, -ry * 0.1, lureX, lureY);
+    g.lineBetween(antStartX, 0, lureX, lureY);
     g.lineStyle(1.2, 0x00eecc, 0.7);
-    g.lineBetween(antStartX, -ry * 0.1, lureX, lureY);
+    g.lineBetween(antStartX, 0, lureX, lureY);
 
     const pulse = 4 + Math.sin(t * 0.013) * 2;
     g.fillStyle(0x00ffcc, 0.12);

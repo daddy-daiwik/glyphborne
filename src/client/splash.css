@@ -14,68 +14,185 @@
   align-items: center;
   height: 100vh;
   margin: 0;
-  background: linear-gradient(135deg, #0a1628 0%, #020813 100%);
+  background: linear-gradient(to top, #060f1c 0%, #112d47 60%, #1f4b70 100%);
   overflow: hidden;
   padding: 16px;
 }
 
-.glow-container {
+/* Volumetric Light Rays */
+.ray {
+  position: absolute;
+  top: 0;
+  height: 120%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 80%);
+  transform-origin: top center;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ray-1 { left: 15%; width: 80px; transform: rotate(18deg); animation: sway-ray-1 12s ease-in-out infinite alternate; }
+.ray-2 { left: 32%; width: 120px; transform: rotate(8deg); animation: sway-ray-2 16s ease-in-out infinite alternate; }
+.ray-3 { left: 50%; width: 100px; transform: rotate(-2deg); animation: sway-ray-3 14s ease-in-out infinite alternate; }
+.ray-4 { left: 68%; width: 130px; transform: rotate(-10deg); animation: sway-ray-4 18s ease-in-out infinite alternate; }
+.ray-5 { left: 82%; width: 90px; transform: rotate(-20deg); animation: sway-ray-5 15s ease-in-out infinite alternate; }
+.ray-6 { left: 45%; width: 150px; transform: rotate(4deg); opacity: 0.6; }
+
+@keyframes sway-ray-1 { 0% { transform: rotate(15deg); } 100% { transform: rotate(21deg); } }
+@keyframes sway-ray-2 { 0% { transform: rotate(5deg); } 100% { transform: rotate(11deg); } }
+@keyframes sway-ray-3 { 0% { transform: rotate(-5deg); } 100% { transform: rotate(1deg); } }
+@keyframes sway-ray-4 { 0% { transform: rotate(-13deg); } 100% { transform: rotate(-7deg); } }
+@keyframes sway-ray-5 { 0% { transform: rotate(-23deg); } 100% { transform: rotate(-17deg); } }
+
+/* Floating Ocean Bubbles */
+.bubble {
+  position: absolute;
+  bottom: -40px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bub-1 { width: 16px; height: 16px; left: 10%; animation: float-bubble 14s linear infinite; }
+.bub-2 { width: 8px; height: 8px; left: 25%; animation: float-bubble 18s linear infinite 2s; }
+.bub-3 { width: 24px; height: 24px; left: 45%; animation: float-bubble 12s linear infinite 1s; }
+.bub-4 { width: 12px; height: 12px; left: 65%; animation: float-bubble 16s linear infinite 3s; }
+.bub-5 { width: 20px; height: 20px; left: 80%; animation: float-bubble 15s linear infinite 0.5s; }
+.bub-6 { width: 10px; height: 10px; left: 90%; animation: float-bubble 20s linear infinite 4s; }
+
+@keyframes float-bubble {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.4;
+  }
+  90% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-110vh) translateX(30px);
+    opacity: 0;
+  }
+}
+
+/* Main Content Layout (Cardless, Atmospheric Flow) */
+.main-content {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 17, 34, 0.85);
-  border: 2px solid #00e5ff;
-  box-shadow: 0 0 25px rgba(0, 229, 255, 0.25);
-  border-radius: 16px;
-  padding: 32px 24px;
   width: 100%;
-  max-width: 440px;
+  max-width: 460px;
   text-align: center;
-  gap: 24px;
+  gap: 22px;
   z-index: 1;
+}
+
+.fish-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 170px;
+  margin-bottom: -10px;
+}
+
+/* Anglerfish styling & animations */
+.splash-fish {
+  animation: float-fish 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 15px rgba(0, 229, 255, 0.5));
+}
+
+.lure-glow {
+  transform-origin: 155px 65px;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.lure-glow-mid {
+  transform-origin: 155px 65px;
+  animation: pulse-glow-mid 2s ease-in-out infinite;
+}
+
+@keyframes float-fish {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.15;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.5;
+  }
+}
+
+@keyframes pulse-glow-mid {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.85;
+  }
 }
 
 .logo-box {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .logo-text {
-  font-size: 2.3em;
+  font-size: 2.8em;
   font-weight: 900;
-  letter-spacing: 2px;
+  letter-spacing: 4px;
   color: #00e5ff;
-  text-shadow: 0 0 15px rgba(0, 229, 255, 0.65), 0 0 2px #001a33;
+  text-shadow: 0 0 25px rgba(0, 229, 255, 0.7), 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .subtitle {
-  font-size: 0.95em;
+  font-size: 1.05em;
   color: #ffd740;
   text-transform: uppercase;
-  letter-spacing: 4px;
+  letter-spacing: 5px;
   font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
 .info-card {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: rgba(0, 10, 20, 0.45);
+  border-radius: 12px;
+  padding: 18px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 .description {
-  font-size: 0.92em;
-  line-height: 1.5;
-  color: #a0c0d0;
+  font-size: 0.9em;
+  line-height: 1.6;
+  color: #c2dbe8;
 }
 
 .daily-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(0, 229, 255, 0.45);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(0, 229, 255, 0.3);
   border-radius: 8px;
   padding: 8px 12px;
   gap: 10px;
@@ -101,35 +218,38 @@
   color: #001122;
   border: none;
   font-weight: 900;
-  font-size: 1.05em;
-  letter-spacing: 1px;
-  padding: 12px 28px;
-  border-radius: 12px;
+  font-size: 1.1em;
+  letter-spacing: 2px;
+  padding: 14px 32px;
+  border-radius: 30px;
   cursor: pointer;
-  box-shadow: 0 0 12px rgba(255, 215, 64, 0.35);
+  box-shadow: 0 0 15px rgba(255, 215, 64, 0.3);
   transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
-  width: 100%;
+  width: 90%;
+  text-transform: uppercase;
 }
 
 .start-button:hover {
   background: #ffea70;
-  transform: scale(1.03);
-  box-shadow: 0 0 20px rgba(255, 215, 64, 0.55);
+  transform: scale(1.04);
+  box-shadow: 0 0 25px rgba(255, 215, 64, 0.6);
 }
 
 .start-button:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .footer {
   position: absolute;
-  bottom: 16px;
+  bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 12px;
   font-size: 0.8em;
-  color: #8090a0;
+  color: #859bb0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  z-index: 1;
 }
 
 .docs-link {
@@ -143,51 +263,4 @@
 
 .divider {
   color: rgba(255, 255, 255, 0.15);
-}
-
-/* Anglerfish animations */
-.splash-fish {
-  animation: float-fish 4s ease-in-out infinite;
-  filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.4));
-}
-
-.lure-glow {
-  transform-origin: 155px 65px;
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.lure-glow-mid {
-  transform-origin: 155px 65px;
-  animation: pulse-glow-mid 2s ease-in-out infinite;
-}
-
-@keyframes float-fish {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    transform: scale(0.85);
-    opacity: 0.15;
-  }
-  50% {
-    transform: scale(1.25);
-    opacity: 0.45;
-  }
-}
-
-@keyframes pulse-glow-mid {
-  0%, 100% {
-    transform: scale(0.9);
-    opacity: 0.45;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 0.8;
-  }
 }
