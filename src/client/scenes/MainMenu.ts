@@ -39,6 +39,8 @@ export class MainMenu extends Scene {
   levelText: Phaser.GameObjects.Text | null = null;
   upgradesText: Phaser.GameObjects.Text | null = null;
   activeBonusText: Phaser.GameObjects.Text | null = null;
+  dailyGlyphText: Phaser.GameObjects.Text | null = null;
+  lastScoreText: Phaser.GameObjects.Text | null = null;
 
   // Welcome popup fields
   welcomePopupContainer: Phaser.GameObjects.Container | null = null;
@@ -73,6 +75,9 @@ export class MainMenu extends Scene {
   tabNovaBtn: Phaser.GameObjects.Text | null = null;
   tabPoisonBtn: Phaser.GameObjects.Text | null = null;
   selectedTab: number = 0;
+  leaderboardPage: number = 0;
+  btnPrevPage: Phaser.GameObjects.Text | null = null;
+  btnNextPage: Phaser.GameObjects.Text | null = null;
 
   leaderboardsData: LeaderboardsData | null = null;
   upgradesRoadmapButton: Phaser.GameObjects.Text | null = null;
@@ -105,6 +110,8 @@ export class MainMenu extends Scene {
     this.levelText = null;
     this.upgradesText = null;
     this.activeBonusText = null;
+    this.dailyGlyphText = null;
+    this.lastScoreText = null;
     this.welcomePopupContainer = null;
     this.welcomePopupBg = null;
     this.welcomePopupTitle = null;
@@ -120,6 +127,9 @@ export class MainMenu extends Scene {
     this.tabNovaBtn = null;
     this.tabPoisonBtn = null;
     this.selectedTab = 0;
+    this.leaderboardPage = 0;
+    this.btnPrevPage = null;
+    this.btnNextPage = null;
 
     this.leaderboardsData = null;
 
@@ -396,6 +406,39 @@ export class MainMenu extends Scene {
     this.overlayCol5List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
     this.leaderboardContainer.add(this.overlayCol5List);
 
+    // Pagination buttons
+    this.btnPrevPage = this.add.text(0, 0, '< PREV', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      color: '#ffffff',
+      backgroundColor: '#01579b',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setPadding(8, 4, 8, 4);
+    this.leaderboardContainer.add(this.btnPrevPage);
+    this.btnPrevPage.on('pointerdown', () => {
+      if (this.leaderboardPage > 0) {
+        this.leaderboardPage--;
+        this.populateOverlayLists();
+        this.refreshLayout();
+      }
+    });
+
+    this.btnNextPage = this.add.text(0, 0, 'NEXT >', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '14px',
+      color: '#ffffff',
+      backgroundColor: '#01579b',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setPadding(8, 4, 8, 4);
+    this.leaderboardContainer.add(this.btnNextPage);
+    this.btnNextPage.on('pointerdown', () => {
+      this.leaderboardPage++;
+      this.populateOverlayLists();
+      this.refreshLayout();
+    });
+
     // Close button
     this.overlayCloseButton = this.add.text(0, 0, 'CLOSE', {
       fontFamily: 'Arial, sans-serif',
@@ -457,6 +500,62 @@ export class MainMenu extends Scene {
       align: 'center',
 
     }).setOrigin(0.5).setDepth(1);
+
+    // Daily Glyph Text
+    this.dailyGlyphText = this.add.text(0, 0, '', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '16px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3.5,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(1);
+
+    // Populate Daily Glyph
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const daysSinceEpoch = Math.floor(Date.now() / MS_PER_DAY);
+    const shapes: Array<'yellow' | 'green' | 'purple'> = ['yellow', 'green', 'purple'];
+    const dailyGlyph = shapes[daysSinceEpoch % 3]!;
+    
+    if (this.dailyGlyphText) {
+      const col = dailyGlyph === 'yellow' ? '#ffcc00' : dailyGlyph === 'green' ? '#00ff66' : '#d500f9';
+      const shapeStr = dailyGlyph === 'yellow' ? 'YELLOW ▲' : dailyGlyph === 'green' ? 'GREEN ●' : 'PURPLE ■';
+      this.dailyGlyphText.setText(`★ ${shapeStr} (gives +20 Score instead of +10!)`);
+      this.dailyGlyphText.setColor(col);
+    }
+
+    // Last Score Text
+    this.lastScoreText = this.add.text(0, 0, '', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '15px',
+      color: '#aaaaaa',
+      stroke: '#000000',
+      strokeThickness: 3,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(1);
+
+    // Populate Last Score
+    let lastScoreVal = 0;
+    if (this.game && this.game.registry) {
+      const regScore = this.game.registry.get('lastScore');
+      if (typeof regScore === 'number') lastScoreVal = regScore;
+    }
+    if (!lastScoreVal && this.playerProgress && this.playerProgress.lastScore) {
+      lastScoreVal = this.playerProgress.lastScore;
+    }
+    if (!lastScoreVal) {
+      try {
+        const lsStr = localStorage.getItem('glyphborne_lastScore');
+        if (lsStr) lastScoreVal = parseInt(lsStr, 10);
+      } catch(e) {}
+    }
+
+    if (this.lastScoreText && typeof lastScoreVal === 'number' && lastScoreVal > 0) {
+      this.lastScoreText.setText(`Last run: ${lastScoreVal} pts`);
+      this.lastScoreText.setVisible(true);
+    } else if (this.lastScoreText) {
+      this.lastScoreText.setVisible(false);
+    }
 
     // Upgrades & Roadmap Overlay Container at depth 2
     this.upgradesRoadmapContainer = this.add.container(0, 0).setDepth(2).setVisible(false);
@@ -548,6 +647,28 @@ export class MainMenu extends Scene {
   private showLeaderboardsOverlay(): void {
     this.leaderboardContainer?.setVisible(true);
 
+    // Add swipe to switch tabs
+    let startX = 0;
+    if (this.overlayBgGraphics) {
+      const { width, height } = this.scale;
+      this.overlayBgGraphics.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
+      this.overlayBgGraphics.on('pointerdown', (p: Phaser.Input.Pointer) => { startX = p.x; });
+      this.overlayBgGraphics.on('pointerup', (p: Phaser.Input.Pointer) => {
+        const dx = p.x - startX;
+        if (dx > 60) {
+          this.selectedTab = Math.max(0, this.selectedTab - 1);
+          this.leaderboardPage = 0;
+          this.refreshLayout();
+          this.populateOverlayLists();
+        } else if (dx < -60) {
+          this.selectedTab = Math.min(4, this.selectedTab + 1);
+          this.leaderboardPage = 0;
+          this.refreshLayout();
+          this.populateOverlayLists();
+        }
+      });
+    }
+
     if (this.overlayCol1List) this.overlayCol1List.setText('Loading...');
     if (this.overlayCol2List) this.overlayCol2List.setText('Loading...');
     if (this.overlayCol3List) this.overlayCol3List.setText('Loading...');
@@ -576,41 +697,46 @@ export class MainMenu extends Scene {
     const width = this.scale.width;
     const isMobile = width < 600;
     const maxNameLen = isMobile ? 5 : 12;
+    const startIdx = this.leaderboardPage * 10;
+    const endIdx = startIdx + 10;
 
     let scoreLines = '';
-    this.leaderboardsData.score.forEach((entry: LeaderboardEntry, i: number) => {
+    const scoreData = this.leaderboardsData.score || [];
+    scoreData.slice(startIdx, endIdx).forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
-      scoreLines += `#${i + 1} ${name} ${entry.score}\n`;
+      scoreLines += `#${startIdx + i + 1} ${name} ${Math.floor(entry.score)}\n`;
     });
     if (this.overlayCol1List) this.overlayCol1List.setText(scoreLines || 'No entries yet');
 
     let tridentLines = '';
     const tridentData = this.leaderboardsData.trident || [];
-    tridentData.forEach((entry: LeaderboardEntry, i: number) => {
+    tridentData.slice(startIdx, endIdx).forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
-      tridentLines += `#${i + 1} ${name} ${entry.score}\n`;
+      tridentLines += `#${startIdx + i + 1} ${name} ${Math.floor(entry.score)}\n`;
     });
     if (this.overlayCol2List) this.overlayCol2List.setText(tridentLines || 'No entries yet');
 
     let lightningLines = '';
-    this.leaderboardsData.lightning.forEach((entry: LeaderboardEntry, i: number) => {
+    const lightData = this.leaderboardsData.lightning || [];
+    lightData.slice(startIdx, endIdx).forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
-      lightningLines += `#${i + 1} ${name} ${entry.score}\n`;
+      lightningLines += `#${startIdx + i + 1} ${name} ${Math.floor(entry.score)}\n`;
     });
     if (this.overlayCol3List) this.overlayCol3List.setText(lightningLines || 'No entries yet');
 
     let novaLines = '';
-    this.leaderboardsData.nova.forEach((entry: LeaderboardEntry, i: number) => {
+    const novaData = this.leaderboardsData.nova || [];
+    novaData.slice(startIdx, endIdx).forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
-      novaLines += `#${i + 1} ${name} ${entry.score}\n`;
+      novaLines += `#${startIdx + i + 1} ${name} ${Math.floor(entry.score)}\n`;
     });
     if (this.overlayCol4List) this.overlayCol4List.setText(novaLines || 'No entries yet');
 
     let poisonLines = '';
     const poisonData = this.leaderboardsData.poison || [];
-    poisonData.forEach((entry: LeaderboardEntry, i: number) => {
+    poisonData.slice(startIdx, endIdx).forEach((entry: LeaderboardEntry, i: number) => {
       const name = entry.username.substring(0, maxNameLen);
-      poisonLines += `#${i + 1} ${name} ${entry.score}\n`;
+      poisonLines += `#${startIdx + i + 1} ${name} ${Math.floor(entry.score)}\n`;
     });
     if (this.overlayCol5List) this.overlayCol5List.setText(poisonLines || 'No entries yet');
 
@@ -652,28 +778,28 @@ export class MainMenu extends Scene {
 
     // Title text — no scaling, fixed font size
     if (this.titleText) {
-      this.titleText.setPosition(midX, Math.round(height * 0.26));
+      this.titleText.setPosition(midX, Math.round(height * 0.32));
       this.titleText.setScale(1);
     }
 
     if (this.subtitleText) {
-      this.subtitleText.setPosition(midX, Math.round(height * 0.36));
+      this.subtitleText.setPosition(midX, Math.round(height * 0.40));
       this.subtitleText.setScale(1);
     }
 
     // Buttons
     if (this.playButton) {
-      this.playButton.setPosition(midX, Math.round(height * 0.53));
+      this.playButton.setPosition(midX, Math.round(height * 0.58));
       this.playButton.setScale(1);
     }
 
     if (this.upgradesRoadmapButton) {
-      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.61));
+      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.70));
       this.upgradesRoadmapButton.setScale(1);
     }
 
     if (this.leaderboardButton) {
-      this.leaderboardButton.setPosition(midX, Math.round(height * 0.69));
+      this.leaderboardButton.setPosition(midX, Math.round(height * 0.80));
       this.leaderboardButton.setScale(1);
     }
 
@@ -690,11 +816,16 @@ export class MainMenu extends Scene {
       this.overlayBgGraphics.fillStyle(0x4fc3f7, 0.85);
       this.overlayBgGraphics.fillRect(0, 0, width, height);
 
+      const lbW = Math.min(Math.max(340, width * 0.95), 800);
+      const lbH = Math.min(600, height * 0.85);
+      const lbX = midX - lbW / 2;
+      const lbY = height / 2 - lbH / 2;
+
       // Panel for Leaderboards (deep blue)
       this.overlayBgGraphics.fillStyle(0x0288d1, 0.95);
-      this.overlayBgGraphics.fillRoundedRect(lbPanelX, lbPanelY, lbPanelW, lbPanelH, 14);
+      this.overlayBgGraphics.fillRoundedRect(lbX, lbY, lbW, lbH, 14);
       this.overlayBgGraphics.lineStyle(3, 0xffffff, 1.0); // White border
-      this.overlayBgGraphics.strokeRoundedRect(lbPanelX, lbPanelY, lbPanelW, lbPanelH, 14);
+      this.overlayBgGraphics.strokeRoundedRect(lbX, lbY, lbW, lbH, 14);
     }
 
     // Connect levels with lines in a roadmap format & Draw Upgrades & Roadmap Graphics Overlay
@@ -777,6 +908,34 @@ export class MainMenu extends Scene {
       this.roadmapCloseButton.setFontSize(isMobile ? '16px' : '22px');
     }
 
+    // Add visual hint for swipe
+    if (this.overlayCloseButton) {
+      this.overlayCloseButton.setPosition(midX, height / 2 + Math.min(600, height * 0.85) / 2 - 30);
+      this.overlayCloseButton.setFontSize(isMobile ? '22px' : '28px');
+    }
+
+    // Pagination buttons setup
+    let maxItems = 0;
+    if (this.leaderboardsData) {
+      if (this.selectedTab === 0) maxItems = (this.leaderboardsData.score || []).length;
+      else if (this.selectedTab === 1) maxItems = (this.leaderboardsData.trident || []).length;
+      else if (this.selectedTab === 2) maxItems = (this.leaderboardsData.lightning || []).length;
+      else if (this.selectedTab === 3) maxItems = (this.leaderboardsData.nova || []).length;
+      else if (this.selectedTab === 4) maxItems = (this.leaderboardsData.poison || []).length;
+    }
+    const hasNext = (this.leaderboardPage * 10 + 10) < maxItems;
+    const hasPrev = this.leaderboardPage > 0;
+
+    const btnY = height / 2 + Math.min(600, height * 0.85) / 2 - 80;
+    if (this.btnPrevPage) {
+      this.btnPrevPage.setPosition(midX - 70, btnY);
+      this.btnPrevPage.setVisible(hasPrev);
+    }
+    if (this.btnNextPage) {
+      this.btnNextPage.setPosition(midX + 70, btnY);
+      this.btnNextPage.setVisible(hasNext);
+    }
+
     // Connect texts
     const currentLvl = this.playerProgress?.level || 1;
     const startLvl = Math.max(1, currentLvl - 2);
@@ -849,53 +1008,39 @@ export class MainMenu extends Scene {
 
     // Overlay Header — no scaling
     if (this.overlayHeader) {
-      this.overlayHeader.setPosition(midX, height * 0.17);
-      this.overlayHeader.setFontSize(isMobile ? '20px' : '28px');
+      this.overlayHeader.setPosition(midX, height / 2 - Math.min(600, height * 0.85) / 2 + 30);
+      this.overlayHeader.setFontSize(isMobile ? '24px' : '32px');
       this.overlayHeader.setScale(1);
     }
 
     // ── Tab buttons placement
-    const tabY = height * 0.23;
-    const tabGap = isMobile ? 55 : 85;
+    const tabY = height / 2 - Math.min(600, height * 0.85) / 2 + 80;
+    const tabGap = isMobile ? 65 : 100;
 
-    if (this.tabDepthBtn) {
-      this.tabDepthBtn.setPosition(midX - tabGap * 2, tabY);
-      this.tabDepthBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabDepthBtn.setColor(this.selectedTab === 0 ? '#ffffff' : '#b3e5fc');
-      this.tabDepthBtn.setStroke(this.selectedTab === 0 ? '#0288d1' : '#000000', this.selectedTab === 0 ? 4 : 2);
-    }
-    if (this.tabTridentBtn) {
-      this.tabTridentBtn.setPosition(midX - tabGap, tabY);
-      this.tabTridentBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabTridentBtn.setColor(this.selectedTab === 1 ? '#ffffff' : '#b3e5fc');
-      this.tabTridentBtn.setStroke(this.selectedTab === 1 ? '#0288d1' : '#000000', this.selectedTab === 1 ? 4 : 2);
-    }
-    if (this.tabLightningBtn) {
-      this.tabLightningBtn.setPosition(midX, tabY);
-      this.tabLightningBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabLightningBtn.setColor(this.selectedTab === 2 ? '#ffffff' : '#b3e5fc');
-      this.tabLightningBtn.setStroke(this.selectedTab === 2 ? '#0288d1' : '#000000', this.selectedTab === 2 ? 4 : 2);
-    }
-    if (this.tabNovaBtn) {
-      this.tabNovaBtn.setPosition(midX + tabGap, tabY);
-      this.tabNovaBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabNovaBtn.setColor(this.selectedTab === 3 ? '#ffffff' : '#b3e5fc');
-      this.tabNovaBtn.setStroke(this.selectedTab === 3 ? '#0288d1' : '#000000', this.selectedTab === 3 ? 4 : 2);
-    }
-    if (this.tabPoisonBtn) {
-      this.tabPoisonBtn.setPosition(midX + tabGap * 2, tabY);
-      this.tabPoisonBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabPoisonBtn.setColor(this.selectedTab === 4 ? '#ffffff' : '#b3e5fc');
-      this.tabPoisonBtn.setStroke(this.selectedTab === 4 ? '#0288d1' : '#000000', this.selectedTab === 4 ? 4 : 2);
-    }
+    const setupTab = (btn: Phaser.GameObjects.Text | null, tabIdx: number, px: number) => {
+      if (btn) {
+        btn.setPosition(px, tabY);
+        btn.setFontSize(isMobile ? '13px' : '16px');
+        btn.setPadding(8, 4, 8, 4);
+        btn.setBackgroundColor(this.selectedTab === tabIdx ? '#0277bd' : '#01579b');
+        btn.setColor(this.selectedTab === tabIdx ? '#ffffff' : '#b3e5fc');
+        btn.setStroke(this.selectedTab === tabIdx ? '#000000' : '#000000', 3);
+      }
+    };
+
+    setupTab(this.tabDepthBtn, 0, midX - tabGap * 2);
+    setupTab(this.tabTridentBtn, 1, midX - tabGap);
+    setupTab(this.tabLightningBtn, 2, midX);
+    setupTab(this.tabNovaBtn, 3, midX + tabGap);
+    setupTab(this.tabPoisonBtn, 4, midX + tabGap * 2);
 
     // Centered columns title & list
-    const lbTitleY = height * 0.31;
-    const lbListY = lbTitleY + 24;
+    const lbTitleY = tabY + 40;
+    const lbListY = lbTitleY + (isMobile ? 30 : 36);
 
-    const titleSize = isMobile ? '12px' : '16px';
-    const listSize = isMobile ? '11px' : '14px';
-    const listSpacing = isMobile ? 5 : 7;
+    const titleSize = isMobile ? '16px' : '22px';
+    const listSize = isMobile ? '15px' : '18px';
+    const listSpacing = isMobile ? 8 : 12;
 
     // Col 1: Depth (selectedTab === 0)
     if (this.overlayCol1Title) {
@@ -971,13 +1116,19 @@ export class MainMenu extends Scene {
 
     // Progression UI Elements positioning
     if (this.streakText) {
-      this.streakText.setPosition(midX, height * 0.07);
+      this.streakText.setPosition(midX, height * 0.05);
     }
     if (this.levelText) {
-      this.levelText.setPosition(midX, height * 0.12);
+      this.levelText.setPosition(midX, height * 0.09);
+    }
+    if (this.dailyGlyphText) {
+      this.dailyGlyphText.setPosition(midX, height * 0.14);
+    }
+    if (this.lastScoreText) {
+      this.lastScoreText.setPosition(midX, height * 0.18);
     }
     if (this.activeBonusText) {
-      this.activeBonusText.setPosition(midX, height * 0.46);
+      this.activeBonusText.setPosition(midX, height * 0.90);
     }
     if (this.upgradesText) {
       this.upgradesText.setVisible(false);
@@ -1048,6 +1199,11 @@ export class MainMenu extends Scene {
 
   private updateProgressTexts(): void {
     if (!this.playerProgress) return;
+
+    if (this.lastScoreText && this.playerProgress.lastScore) {
+      this.lastScoreText.setText(`Last run: ${this.playerProgress.lastScore} pts`);
+      this.lastScoreText.setVisible(true);
+    }
 
     const streak = this.playerProgress.streak;
     const mult = getStreakMultiplier(streak);

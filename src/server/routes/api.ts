@@ -205,11 +205,11 @@ api.post('/leaderboard', async (c) => {
       }
 
       // Check if qualifies
-      const lowestScore = list.length >= 10 ? list[list.length - 1]!.score : -1;
-      if (value > lowestScore || list.length < 10) {
+      const lowestScore = list.length >= 100 ? list[list.length - 1]!.score : -1;
+      if (value > lowestScore || list.length < 100) {
         list.push({ username, score: value, timestamp });
         list.sort((a, b) => b.score - a.score);
-        list = list.slice(0, 10);
+        list = list.slice(0, 100);
         await redis.set(key, JSON.stringify(list));
       }
       return list;
@@ -221,6 +221,7 @@ api.post('/leaderboard', async (c) => {
       updateCategory('leaderboard_lightning', lightningChain),
       updateCategory('leaderboard_nova', novaChain),
       updateCategory('leaderboard_poison', poisonChain ?? 0),
+      redis.set(`player:${username}:lastScore`, score.toString()),
     ]);
 
     return c.json<LeaderboardPostResponse>({
@@ -242,18 +243,20 @@ api.post('/leaderboard', async (c) => {
 
 // Helper to get player progress from Redis
 async function getPlayerProgress(username: string): Promise<PlayerProgressResponse> {
-  const [streakStr, lastPlayed, xpStr, levelStr, upgradesStr, welcomeBonusStr] = await Promise.all([
+  const [streakStr, lastPlayed, xpStr, levelStr, upgradesStr, welcomeBonusStr, lastScoreStr] = await Promise.all([
     redis.get(`player:${username}:streak`),
     redis.get(`player:${username}:lastPlayed`),
     redis.get(`player:${username}:xp`),
     redis.get(`player:${username}:level`),
     redis.get(`player:${username}:upgrades`),
     redis.get(`player:${username}:welcomeBonus`),
+    redis.get(`player:${username}:lastScore`),
   ]);
 
   const streak = streakStr ? parseInt(streakStr, 10) : 0;
   const xp = xpStr ? parseInt(xpStr, 10) : 0;
   const level = levelStr ? parseInt(levelStr, 10) : 1;
+  const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 0;
 
   let upgrades: UpgradesData = { speed: 0, damage: 0, hp: 0, pickup: 0 };
   if (upgradesStr) {
@@ -300,6 +303,7 @@ async function getPlayerProgress(username: string): Promise<PlayerProgressRespon
     level,
     upgrades,
     welcomeBonus,
+    lastScore,
   };
 }
 

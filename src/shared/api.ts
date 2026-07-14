@@ -69,6 +69,7 @@ export type PlayerProgressResponse = {
   level: number;
   upgrades: UpgradesData;
   welcomeBonus: WelcomeBonusData;
+  lastScore: number;
 };
 
 export type StreakResponse = {

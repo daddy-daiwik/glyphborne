@@ -75,6 +75,7 @@ type Enemy = {
   chargeDirY?: number;
   isMinion?: boolean;
   colorSecondary?: number;
+  slowFactor?: number; // 0.0–1.0 speed multiplier while slowed (e.g. 0.4 = 40% speed)
 };
 
 type Projectile = {
@@ -374,6 +375,20 @@ export class Game extends Scene {
   bossSpawnCount: number = 0;
   lastBossSchemeIndex: number | undefined = undefined;
 
+  // Depth meter
+  depthMeterGraphics: Phaser.GameObjects.Graphics | null = null;
+  bossTimerMax: number = 20;
+
+  // Boss HP phase tracking
+  bossPhaseTriggered: Set<number> = new Set();
+
+  // Player death / idle state
+  playerDead: boolean = false;
+  playerIdleBobOffset: number = 0;
+
+  // Sound engine
+  audioCtx: AudioContext | null = null;
+
   constructor() {
     super('Game');
   }
@@ -435,6 +450,9 @@ export class Game extends Scene {
     this.joystickGraphics = null;
     this.spellProjectiles = [];
     this.killTimestamps = [];
+    this.playerDead = false;
+    this.bossPhaseTriggered = new Set();
+    this.bossTimerMax = 20;
     this.killComboCount = 0;
     this.lastComboCount = 0;
     this.heatMode = false;
@@ -596,6 +614,7 @@ export class Game extends Scene {
 
     // Blaze border + combo counter
     this.blazeGraphics = this.add.graphics().setScrollFactor(0).setDepth(20);
+    this.depthMeterGraphics = this.add.graphics().setScrollFactor(0).setDepth(20);
     this.fxGraphics = this.add.graphics().setDepth(14);
     this.comboCountText = this.add
       .text(0, 0, '', {
@@ -799,11 +818,12 @@ export class Game extends Scene {
     this.updatePlayerMovement(dt);
     this.updateShieldVisual();
     this.updateSpeedBoost(delta);
-    this.updateEnemies(time, dt);
+    this.updateEnemies(this.gameTime, dt);
     this.updateProjectiles(dt);
     this.updateSpellProjectiles(dt);
-    this.updateTokens(time);
-    this.updateComboDisplay(time);
+    this.updateTokens(this.gameTime);
+    this.updateComboDisplay(this.gameTime);
+    this.drawDepthMeter();
     this.updateFX(dt);
     this.drawJoystick();
   }
@@ -867,8 +887,14 @@ export class Game extends Scene {
 
   drawPlayer(): void {
     if (!this.playerGraphics) return;
+    if (this.playerDead) return;
     const g = this.playerGraphics;
     g.clear();
+
+    // Idle bob — only when not moving
+    const isMoving = this.joystickActive || (this.keys && (this.keys.W.isDown || this.keys.S.isDown || this.keys.A.isDown || this.keys.D.isDown));
+    this.playerIdleBobOffset = isMoving ? 0 : Math.sin(this.gameTime * 0.002) * 3;
+    this.playerGraphics.setY(this.playerY + this.playerIdleBobOffset);
 
     const isInvulnerable = this.gameTime < this.lastDamageTime + 1000;
     if (isInvulnerable && Math.floor(this.gameTime / 60) % 2 === 0) return;
@@ -1008,15 +1034,90 @@ export class Game extends Scene {
     g.lineStyle(1.2, 0x00eecc, 0.7);
     g.lineBetween(antStartX, 0, lureX, lureY);
 
-    const pulse = 4 + Math.sin(t * 0.013) * 2;
-    g.fillStyle(0x00ffcc, 0.12);
-    g.fillCircle(lureX, lureY, pulse + 14);
-    g.fillStyle(0x00ffcc, 0.25);
-    g.fillCircle(lureX, lureY, pulse + 9);
-    g.fillStyle(0x00ffcc, 0.5);
-    g.fillCircle(lureX, lureY, pulse + 4);
-    g.fillStyle(0xffffff, 1);
-    g.fillCircle(lureX, lureY, pulse);
+    // Lure glow — skip if dead
+    if (!this.playerDead) {
+      const pulse = 4 + Math.sin(t * 0.013) * 2;
+      g.fillStyle(0x00ffcc, 0.12);
+      g.fillCircle(lureX, lureY, pulse + 14);
+      g.fillStyle(0x00ffcc, 0.25);
+      g.fillCircle(lureX, lureY, pulse + 9);
+      g.fillStyle(0x00ffcc, 0.5);
+      g.fillCircle(lureX, lureY, pulse + 4);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(lureX, lureY, pulse);
+    }
+  }
+
+  // ─── Sound Engine ─────────────────────────────────────────────────────────────
+  getAudioCtx(): AudioContext | null {
+    try {
+      if (!this.audioCtx) this.audioCtx = new AudioContext();
+      if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+      return this.audioCtx;
+    } catch { return null; }
+  }
+
+  playSound(type: 'cast_trident'|'cast_nova'|'cast_lightning'|'cast_poison'|'kill'|'hit'|'boss_spawn'|'boss_die'|'token'|'heal'): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    switch (type) {
+      case 'cast_trident':
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(880, now); osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+        gain.gain.setValueAtTime(0.18, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15); break;
+      case 'cast_nova':
+        osc.type = 'sine'; osc.frequency.setValueAtTime(200, now); osc.frequency.exponentialRampToValueAtTime(80, now + 0.25);
+        gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.start(now); osc.stop(now + 0.25); break;
+      case 'cast_lightning':
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(440, now); osc.frequency.exponentialRampToValueAtTime(880, now + 0.05); osc.frequency.exponentialRampToValueAtTime(220, now + 0.12);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15); break;
+      case 'cast_poison':
+        osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(180, now + 0.2);
+        gain.gain.setValueAtTime(0.12, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2); break;
+      case 'kill':
+        osc.type = 'sine'; osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+        gain.gain.setValueAtTime(0.12, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1); break;
+      case 'hit':
+        osc.type = 'square'; osc.frequency.setValueAtTime(120, now); osc.frequency.exponentialRampToValueAtTime(60, now + 0.12);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.start(now); osc.stop(now + 0.12); break;
+      case 'boss_spawn': {
+        const osc2 = ctx.createOscillator(); const gain2 = ctx.createGain();
+        osc2.connect(gain2); gain2.connect(ctx.destination);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(60, now); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        osc2.type = 'sine'; osc2.frequency.setValueAtTime(900, now + 0.1); osc2.frequency.exponentialRampToValueAtTime(400, now + 0.6);
+        gain2.gain.setValueAtTime(0.0, now); gain2.gain.setValueAtTime(0.2, now + 0.1); gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        osc.start(now); osc.stop(now + 0.6); osc2.start(now + 0.1); osc2.stop(now + 0.6); break;
+      }
+      case 'boss_die': {
+        const freqs = [523, 659, 784, 1047];
+        freqs.forEach((f, i) => {
+          const o = ctx.createOscillator(); const gn = ctx.createGain();
+          o.connect(gn); gn.connect(ctx.destination);
+          o.type = 'sine'; o.frequency.value = f;
+          gn.gain.setValueAtTime(0, now + i * 0.08); gn.gain.linearRampToValueAtTime(0.15, now + i * 0.08 + 0.05);
+          gn.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.35);
+          o.start(now + i * 0.08); o.stop(now + i * 0.08 + 0.35);
+        }); break;
+      }
+      case 'token':
+        osc.type = 'sine'; osc.frequency.setValueAtTime(1200, now); osc.frequency.exponentialRampToValueAtTime(1600, now + 0.06);
+        gain.gain.setValueAtTime(0.07, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08); break;
+      case 'heal':
+        osc.type = 'sine'; osc.frequency.setValueAtTime(660, now); osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+        gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15); break;
+    }
   }
 
   updatePlayerMovement(dt: number): void {
@@ -1110,7 +1211,8 @@ export class Game extends Scene {
         if (e.slowTimer < 0) e.slowTimer = 0;
       }
 
-      const speedMult = 1.0;
+      // Bug fix: apply slow factor to movement speed if enemy is slowed
+      const speedMult = (e.slowTimer && e.slowTimer > 0) ? (e.slowFactor ?? 1.0) : 1.0;
 
       switch (e.kind) {
         case 'current': this.updateCurrentEnemy(e, dt, i, speedMult); break;
@@ -1411,6 +1513,27 @@ export class Game extends Scene {
     e.hitFlashTime = this.gameTime + 100;
     this.redrawEnemy(e);
 
+    // Polish: floating damage number on enemy hit
+    if (e.kind !== 'boss' || scaledAmount >= 20) {
+      const dmgTxt = this.add
+        .text(e.x + (Math.random() - 0.5) * 20, e.y - 15, `-${Math.floor(scaledAmount)}`, {
+          fontFamily: 'Arial Black',
+          fontSize: e.kind === 'boss' ? '16px' : '13px',
+          color: e.kind === 'boss' ? '#ff4444' : '#ffaaaa',
+          stroke: '#000000',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setDepth(16);
+      this.tweens.add({
+        targets: dmgTxt,
+        y: dmgTxt.y - 35,
+        alpha: 0,
+        duration: 650,
+        onComplete: () => dmgTxt.destroy(),
+      });
+    }
+
     if (e.hp <= 0) {
       if (e.kind === 'boss') {
         this.defeatBoss(e);
@@ -1436,6 +1559,7 @@ export class Game extends Scene {
     this.projectiles = [];
 
     this.cameras.main.shake(50, 0.02);
+    this.playSound('kill');
 
     const col = spellId ? SPELL_COLORS[spellId] : 0xff5533;
     const r = (col >> 16) & 0xff;
@@ -1604,6 +1728,10 @@ export class Game extends Scene {
     this.hp = Math.max(0, this.hp - amount);
     this.drawHpBar();
 
+    // Polish: camera shake on player hit
+    this.cameras.main.shake(150, 0.018);
+    this.playSound('hit');
+
     this.fxRings.push({
       x: this.playerX,
       y: this.playerY,
@@ -1622,6 +1750,7 @@ export class Game extends Scene {
     // Always heal the player when picking up a buff orb
     this.hp = Math.min(this.maxHp, this.hp + BUFF_HEAL);
     this.drawHpBar();
+    this.playSound('heal');
 
     // Sometimes grant an extra bonus buff
     const roll = Math.random();
@@ -2144,7 +2273,18 @@ export class Game extends Scene {
       this.drawToken(t, vibeY, vibeX);
 
       const dist = Phaser.Math.Distance.Between(this.playerX, this.playerY, t.x, t.y);
+
+      // Orb magnet pull — smoothly attract tokens within 1.8x pickupRadius
+      const pullRadius = this.pickupRadius * 1.8;
+      if (dist < pullRadius && dist >= this.pickupRadius) {
+        const pullSpeed = 180 * (1 - dist / pullRadius); // faster when closer
+        const angle = Math.atan2(this.playerY - t.y, this.playerX - t.x);
+        t.x += Math.cos(angle) * pullSpeed * (1 / 60);
+        t.y += Math.sin(angle) * pullSpeed * (1 / 60);
+      }
+
       if (dist < this.pickupRadius) {
+        this.playSound('token');
         this.inventory[t.shape]++;
 
         const isDaily = t.shape === this.dailyGlyph;
@@ -2347,6 +2487,11 @@ export class Game extends Scene {
 
     this.redrawInventoryHud();
     this.redrawComboBar();
+    // Sound on spell cast
+    const soundMap: Record<string, 'cast_trident'|'cast_nova'|'cast_lightning'|'cast_poison'> = {
+      trident: 'cast_trident', nova: 'cast_nova', lightning: 'cast_lightning', poison: 'cast_poison',
+    };
+    this.playSound(soundMap[combo.id] ?? 'cast_trident');
     this.triggerSpellEffect(combo.id, mouseX, mouseY);
   }
 
@@ -2822,21 +2967,37 @@ export class Game extends Scene {
     const g = this.comboBarGraphics!;
 
     // Background
-    g.fillStyle(0x0a0a1e, 0.82);
+    g.fillStyle(0x0a0a1e, 0.85);
     g.fillRoundedRect(slotX, slotY, sw, sh, 5);
+
+    // Disabled overlay
+    if (!canCast) {
+      g.fillStyle(0x000000, 0.35);
+      g.fillRoundedRect(slotX, slotY, sw, sh, 5);
+    }
 
     // Border
     const borderColor =
       isSel && canCast ? 0x00ffcc
-      : isSel          ? 0x00f0ff
+      : isSel          ? 0x555577
       : canCast        ? 0x00cc55
-      :                  0x2a2a5a;
-    const borderAlpha = isSel || canCast ? 1 : 0.35;
-    const lineW = isSel || canCast ? 2 : 1;
+      :                  0x252545;
+    const borderAlpha = isSel && canCast ? 1 : canCast ? 0.85 : 0.3;
+    const lineW = isSel ? 2 : canCast ? 1.5 : 1;
 
-    if (isSel || canCast) {
-      g.lineStyle(6, borderColor, 0.12);
-      g.strokeRoundedRect(slotX - 2, slotY - 2, sw + 4, sh + 4, 7);
+    // Selected + affordable: animated pulsing outer glow
+    if (isSel && canCast) {
+      const pulse = 0.12 + Math.sin(this.gameTime * 0.01) * 0.07;
+      g.lineStyle(8, 0x00ffcc, pulse);
+      g.strokeRoundedRect(slotX - 3, slotY - 3, sw + 6, sh + 6, 8);
+      g.lineStyle(4, 0x00ffcc, pulse * 1.8);
+      g.strokeRoundedRect(slotX - 1, slotY - 1, sw + 2, sh + 2, 6);
+    } else if (isSel) {
+      g.lineStyle(4, 0x555577, 0.4);
+      g.strokeRoundedRect(slotX - 1, slotY - 1, sw + 2, sh + 2, 6);
+    } else if (canCast) {
+      g.lineStyle(4, 0x00cc55, 0.15);
+      g.strokeRoundedRect(slotX - 1, slotY - 1, sw + 2, sh + 2, 6);
     }
     g.lineStyle(lineW, borderColor, borderAlpha);
     g.strokeRoundedRect(slotX, slotY, sw, sh, 5);
@@ -2848,7 +3009,7 @@ export class Game extends Scene {
     const cx = slotX + sw / 2;
     const totalIconW = iconStep * (combo.icons.length - 1);
     const iconStartX = cx - totalIconW / 2;
-    const iconAlpha = canCast ? 1 : 0.3;
+    const iconAlpha = canCast ? 1 : 0.25;
 
     for (let j = 0; j < combo.icons.length; j++) {
       const shape = combo.icons[j]!;
@@ -2865,14 +3026,14 @@ export class Game extends Scene {
     // Spell name text
     const txt = this.comboNameTexts[comboIndex]!;
     txt.setPosition(cx, slotY + sh * 0.72);
-    txt.setColor(canCast ? '#ffffff' : '#444466');
+    txt.setColor(isSel && canCast ? '#00ffcc' : canCast ? '#ccffcc' : '#333355');
     txt.setText(combo.shortName);
     txt.setFontSize('11px');
     txt.setScrollFactor(0);
 
-    // Sel indicator: number key hint
-    if (isSel) {
-      g.fillStyle(0x00ffcc, 0.18);
+    // Selected fill tint
+    if (isSel && canCast) {
+      g.fillStyle(0x00ffcc, 0.10);
       g.fillRoundedRect(slotX, slotY, sw, sh, 5);
     }
   }
@@ -2986,27 +3147,33 @@ export class Game extends Scene {
       if (combo > 1) {
         if (combo !== this.lastComboCount) {
           this.comboCountText.setText(`x${combo} COMBO!`);
-          this.comboCountText.setPosition(this.playerX, this.playerY - PLAYER_RADIUS - 22);
           this.comboCountText.setAlpha(1);
-
-          // Pop size and snap back
           this.tweens.killTweensOf(this.comboCountText);
           this.comboCountText.setScale(1.6);
           this.tweens.add({
             targets: this.comboCountText,
-            scaleX: 1.0,
-            scaleY: 1.0,
-            duration: 250,
-            ease: 'Back.easeOut',
+            scaleX: 1.0, scaleY: 1.0,
+            duration: 250, ease: 'Back.easeOut',
           });
-
-          // Intense glow/color shift
           const colors = ['#ffd740', '#ffaa00', '#ff0033', '#e040fb'];
           const colIndex = Math.min(colors.length - 1, Math.floor((combo - 2) / 3));
           this.comboCountText.setColor(colors[colIndex]!);
+        }
+        this.comboCountText.setPosition(this.playerX, this.playerY - PLAYER_RADIUS - 22);
+
+        // Combo timeout warning: flash when oldest kill > 1500ms old
+        if (this.killTimestamps.length > 0) {
+          const oldest = this.killTimestamps[0]!;
+          const age = time - oldest;
+          if (age > 1500) {
+            // Rapid alpha flicker
+            const flicker = Math.sin(time * 0.04) > 0 ? 1 : 0.2;
+            this.comboCountText.setAlpha(flicker);
+          } else {
+            this.comboCountText.setAlpha(1);
+          }
         } else {
-          // Keep it positioned above player
-          this.comboCountText.setPosition(this.playerX, this.playerY - PLAYER_RADIUS - 22);
+          this.comboCountText.setAlpha(1);
         }
       } else {
         this.comboCountText.setAlpha(0);
@@ -3066,6 +3233,48 @@ export class Game extends Scene {
     }
   }
 
+  drawDepthMeter(): void {
+    if (!this.depthMeterGraphics || this.isGameOver) return;
+    const g = this.depthMeterGraphics;
+    g.clear();
+    const { width, height } = this.scale;
+    const meterH = height * 0.35;
+    const meterW = 8;
+    const meterX = width - meterW - 6;
+    const meterY = height * 0.32;
+
+    // Timer progress (1 = full / boss far, 0 = empty / boss imminent)
+    const maxT = this.isBossFight ? this.bossTimerMax : this.bossTimerMax;
+    const progress = this.isBossFight ? 0 : Math.max(0, Math.min(1, this.bossTimer / maxT));
+
+    // Color: blue(safe) → amber → red(danger)
+    const danger = 1 - progress;
+    const r = Math.floor(30 + danger * 225);
+    const gv = Math.floor(180 - danger * 160);
+    const b = Math.floor(255 - danger * 250);
+    const barColor = (r << 16) | (gv << 8) | b;
+
+    // Track bg
+    g.fillStyle(0x000000, 0.3);
+    g.fillRoundedRect(meterX, meterY, meterW, meterH, 4);
+
+    // Fill (top to bottom as danger fills)
+    const fillH = meterH * danger;
+    if (fillH > 0) {
+      const pulse = this.isBossFight ? 1 : (danger > 0.8 ? 0.7 + Math.sin(this.gameTime * 0.015) * 0.3 : 0.85);
+      g.fillStyle(barColor, pulse);
+      g.fillRoundedRect(meterX, meterY, meterW, fillH, 4);
+    }
+
+    // Border
+    g.lineStyle(1, 0xffffff, 0.25);
+    g.strokeRoundedRect(meterX, meterY, meterW, meterH, 4);
+
+    // Label
+    g.fillStyle(0xffffff, 0.4);
+    g.fillRect(meterX - 1, meterY - 10, meterW + 2, 2);
+  }
+
   addXp(amount: number, x: number, y: number): void {
     this.xpEarned += amount;
     if (this.xpEarnedText) {
@@ -3092,6 +3301,7 @@ export class Game extends Scene {
 
   endGame(): void {
     this.isGameOver = true;
+    this.playerDead = true;
     if (this.spawnTimer) this.spawnTimer.destroy();
     if (this.scoreTimer) this.scoreTimer.destroy();
 
@@ -3111,13 +3321,34 @@ export class Game extends Scene {
     if (this.xpEarnedText) this.xpEarnedText.destroy();
     if (this.ambientGraphics) this.ambientGraphics.destroy();
 
+    // Player death animation: bubble burst + spin-shrink
     if (this.playerGraphics) {
+      // Spawn rising bubbles
+      for (let b = 0; b < 14; b++) {
+        const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+        const speed = 40 + Math.random() * 80;
+        this.fxParticles.push({
+          x: this.playerX + (Math.random() - 0.5) * 10,
+          y: this.playerY,
+          vx: Math.cos(angle) * speed * 0.4,
+          vy: Math.sin(angle) * speed,
+          color: 0xaaddff,
+          shape: 'yellow', // drawn as circle via fxParticles
+          alpha: 0.8,
+          size: 3 + Math.random() * 5,
+          life: 0,
+          maxLife: 800 + Math.random() * 400,
+        });
+      }
+      // Spin and shrink
       this.tweens.add({
         targets: this.playerGraphics,
+        angle: 720,
+        scaleX: 0,
+        scaleY: 0,
         alpha: 0,
-        duration: 300,
-        repeat: 2,
-        yoyo: true,
+        duration: 600,
+        ease: 'Cubic.easeIn',
       });
     }
 
@@ -3160,7 +3391,40 @@ export class Game extends Scene {
 
     // Camera flash and shake
     this.cameras.main.flash(500, 255, 255, 255);
-    this.cameras.main.shake(200, 0.03);
+    this.cameras.main.shake(400, 0.05);
+    this.playSound('boss_spawn');
+
+    // Polish: dramatic "LEVIATHAN AWAKENS" announcement
+    const awakensText = this.add
+      .text(this.scale.width / 2, this.scale.height / 2, 'LEVIATHAN\nAWAKENS', {
+        fontFamily: 'Arial Black',
+        fontSize: '42px',
+        color: '#ff2222',
+        stroke: '#000000',
+        strokeThickness: 8,
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(20)
+      .setScale(0.1)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: awakensText,
+      scaleX: 1.0,
+      scaleY: 1.0,
+      alpha: 1.0,
+      duration: 400,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: awakensText,
+          alpha: 0,
+          delay: 1200,
+          duration: 400,
+          onComplete: () => awakensText.destroy(),
+        });
+      },
+    });
 
     // Clear all normal enemies from screen
     for (let k = this.enemies.length - 1; k >= 0; k--) {
@@ -3469,43 +3733,27 @@ export class Game extends Scene {
   }
 
   spawnMinion(x: number, y: number): void {
-    const isZombie = Math.random() < 0.5;
     const graphics = this.add.graphics().setDepth(5);
-
-    if (isZombie) {
-      const radius = ZOMBIE_RADIUS;
-      const speed = (30 + Math.random() * 10) * this.difficultySpeedMultiplier;
-      const enemy: Enemy = {
-        kind: 'zombie',
-        graphics,
-        x,
-        y,
-        radius,
-        speed,
-        hp: ENEMY_HP.zombie,
-        slowTimer: 0,
-        isMinion: true,
-      };
-      this.enemies.push(enemy);
-      this.redrawEnemy(enemy);
-    } else {
-      const radius = ATTACKER_RADIUS;
-      const speed = (40 + Math.random() * 20) * this.difficultySpeedMultiplier;
-      const enemy: Enemy = {
-        kind: 'attacker',
-        graphics,
-        x,
-        y,
-        radius,
-        speed,
-        hp: ENEMY_HP.attacker,
-        slowTimer: 0,
-        projectileTimer: 1000 + Math.random() * 2000,
-        isMinion: true,
-      };
-      this.enemies.push(enemy);
-      this.redrawEnemy(enemy);
-    }
+    const radius = ZOMBIE_RADIUS;
+    const speed = (30 + Math.random() * 10) * this.difficultySpeedMultiplier;
+    // Bug fix: initialise dirX/dirY and nextDirTimer so updateZombieEnemy doesn't produce NaN
+    const spawnAngle = Math.random() * Math.PI * 2;
+    const enemy: Enemy = {
+      kind: 'zombie',
+      graphics,
+      x,
+      y,
+      radius,
+      speed,
+      hp: ENEMY_HP.zombie,
+      slowTimer: 0,
+      dirX: Math.cos(spawnAngle),
+      dirY: Math.sin(spawnAngle),
+      nextDirTimer: 1000 + Math.random() * 2000,
+      isMinion: true,
+    };
+    this.enemies.push(enemy);
+    this.redrawEnemy(enemy);
   }
 
   drawBoss(e: Enemy): void {
@@ -3638,7 +3886,6 @@ export class Game extends Scene {
         color: '#FF1744',
         stroke: '#000000',
         strokeThickness: 3.5,
-
       }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
     } else {
       this.bossHpText.setPosition(width / 2, barY - 14).setVisible(true);
@@ -3653,12 +3900,43 @@ export class Game extends Scene {
 
     const ratio = Math.max(0, Math.min(1, this.boss.hp / this.boss.maxHp!));
     if (ratio > 0) {
-      g.fillStyle(0xFF1744, 1.0);
+      // Color shift: red → orange at low HP
+      const hpColor = ratio > 0.5 ? 0xFF1744 : ratio > 0.25 ? 0xFF6600 : 0xFF9900;
+      g.fillStyle(hpColor, 1.0);
       g.fillRoundedRect(barX, barY, barW * ratio, barH, 4);
     }
 
     g.lineStyle(1.5, 0xffffff, 0.95);
     g.strokeRoundedRect(barX, barY, barW, barH, 4);
+
+    // Phase marker tick marks at 75%, 50%, 25%
+    const phases = [0.75, 0.5, 0.25];
+    for (const p of phases) {
+      const tickX = barX + barW * p;
+      g.lineStyle(2, 0xffffff, 0.7);
+      g.lineBetween(tickX, barY - 3, tickX, barY + barH + 3);
+    }
+
+    // Phase shift announcement when crossing thresholds
+    const phaseThresholds = [75, 50, 25];
+    for (const thresh of phaseThresholds) {
+      if (!this.bossPhaseTriggered.has(thresh) && ratio <= thresh / 100) {
+        this.bossPhaseTriggered.add(thresh);
+        this.cameras.main.shake(250, 0.025);
+        const phaseText = this.add.text(width / 2, this.scale.height / 2 - 60,
+          `⚡ PHASE SHIFT — ${thresh}%`, {
+            fontFamily: 'Arial Black', fontSize: '22px',
+            color: '#ff6600', stroke: '#000000', strokeThickness: 6,
+          }).setOrigin(0.5).setDepth(18).setAlpha(0);
+        this.tweens.add({
+          targets: phaseText, alpha: 1, scaleX: 1.1, scaleY: 1.1,
+          duration: 200, yoyo: true, repeat: 1,
+          onComplete: () => {
+            this.tweens.add({ targets: phaseText, alpha: 0, delay: 600, duration: 300, onComplete: () => phaseText.destroy() });
+          },
+        });
+      }
+    }
   }
 
   showEssenceText(): void {
@@ -3692,6 +3970,7 @@ export class Game extends Scene {
     this.projectiles = [];
 
     this.cameras.main.flash(200, 255, 255, 255);
+    this.playSound('boss_die');
 
     const colors = [0x7B1FA2, 0xD32F2F];
     const shapes: Array<Shape | 'star'> = ['yellow', 'green', 'purple', 'star'];
@@ -3716,6 +3995,9 @@ export class Game extends Scene {
     const bonus = 50 + Math.floor(this.score / 10);
     this.score += bonus;
     this.scoreText.setText(`Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`);
+
+    // Bug fix: award XP for killing the boss
+    this.addXp(10, e.x, e.y);
 
     const txt = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, `LEVIATHAN SLAIN! +${bonus} BONUS!`, {
       fontFamily: 'Arial Black',
@@ -3750,6 +4032,7 @@ export class Game extends Scene {
 
     this.isBossFight = false;
     this.boss = null;
+    this.bossPhaseTriggered = new Set();
 
     this.bossSpawnCount++;
     if (this.bossSpawnCount % 2 === 1) {
