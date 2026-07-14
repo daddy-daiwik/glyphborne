@@ -48,3 +48,48 @@ export type LeaderboardPostResponse = {
   leaderboards: LeaderboardsData;
 };
 
+export type UpgradesData = {
+  speed: number;
+  damage: number;
+  hp: number;
+  pickup: number;
+};
+
+export type WelcomeBonusData = {
+  type: 'score' | 'orbs' | 'hp' | 'doubleKills';
+  value: number;
+  claimed: boolean;
+};
+
+export type PlayerProgressResponse = {
+  username: string;
+  streak: number;
+  lastPlayed: string;
+  xp: number;
+  level: number;
+  upgrades: UpgradesData;
+  welcomeBonus: WelcomeBonusData;
+};
+
+export type StreakResponse = {
+  streak: number;
+  bonusMultiplier: number;
+  lastPlayed: string;
+};
+
+export type XpResponse = {
+  xp: number;
+  level: number;
+  leveledUp: boolean;
+  availableUpgrades: string[];
+};
+
+export type UpgradeResponse = {
+  status: 'success';
+  upgrades: UpgradesData;
+};
+
+export type WelcomeResponse = {
+  status: 'success';
+  welcomeBonus: WelcomeBonusData;
+};

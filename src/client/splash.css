@@ -15,8 +15,7 @@
   margin: 0;
   background-color: #7acaf3; /* Solid pastel blue matching game-over screen */
   overflow: hidden;
-  padding: 16px;
-  padding-bottom: 80px; /* Push content up to avoid footer overlap */
+  padding: 12px;
 }
 
 /* Flat background bubbles/circles matching the game feel */
@@ -41,7 +40,7 @@
   width: 100%;
   max-width: 440px;
   text-align: center;
-  gap: 22px;
+  gap: 14px;
   z-index: 1;
 }
 
@@ -49,8 +48,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 160px;
-  margin-bottom: -10px;
+  height: 120px;
+  margin-bottom: -15px;
   animation: float-fish 4s ease-in-out infinite;
 }
 
@@ -71,15 +70,14 @@
 .logo-box {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .logo-text {
-  font-size: 3.2em;
+  font-size: 2.6em;
   font-weight: 900;
-  letter-spacing: 3px;
-  color: #ffd740; /* Yellow matching in-game text */
-  /* Thick black outline for retro cartoon feel */
+  letter-spacing: 2px;
+  color: #ffd740; /* Yellow to match flat styling */
   text-shadow: 
     -3px -3px 0 #000,  
      3px -3px 0 #000,
@@ -105,12 +103,12 @@
 .info-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   background: #7f6ad8; /* Beautiful cartoonish pastel violet */
   border: 3.5px solid #000000;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 6px 6px 0px #000000; /* Retro flat shadow */
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 4px 4px 0px #000000; /* Retro flat shadow */
 }
 
 .description {
@@ -153,15 +151,16 @@
   color: #000000;
   border: 3.5px solid #000000;
   font-weight: 900;
-  font-size: 1.25em;
-  letter-spacing: 2px;
-  padding: 14px 32px;
-  border-radius: 30px;
+  font-size: 1.1em;
+  letter-spacing: 1.5px;
+  padding: 10px 24px;
+  border-radius: 20px;
   cursor: pointer;
-  box-shadow: 6px 6px 0px #000000;
+  box-shadow: 4px 4px 0px #000000;
   transition: transform 0.1s ease, box-shadow 0.1s ease;
   width: 90%;
   text-transform: uppercase;
+  margin-top: 5px;
 }
 
 .start-button:hover {
@@ -176,10 +175,8 @@
 }
 
 .footer {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: relative;
+  margin-top: 16px;
   display: flex;
   gap: 12px;
   font-size: 0.85em;

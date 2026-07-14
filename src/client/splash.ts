@@ -25,9 +25,9 @@ discordLink.addEventListener('click', () => {
 function init() {
   // Compute daily glyph dynamically matching Game.ts daily glyph math:
   const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  const shapes = ['TRIANGLE ▲', 'CIRCLE ●', 'SQUARE ■'] as const;
+  const shapes = ['YELLOW ▲', 'GREEN ●', 'PURPLE ■'] as const;
   const targetShape = shapes[daysSinceEpoch % 3]!;
-  dailyGlyphEl.textContent = `★ ${targetShape} (Gives +20 Score!)`;
+  dailyGlyphEl.textContent = `★ ${targetShape} (gives +20 Score instead of +10 when collected!)`;
 }
 
 init();

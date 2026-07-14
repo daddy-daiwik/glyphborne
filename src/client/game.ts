@@ -14,13 +14,17 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: 'game-container',
   backgroundColor: '#028af8',
   scale: {
-    // Keep a fixed game resolution but automatically scale it to fill/fit within the available
-    // web-view / device while maintaining aspect ratio.
+    // RESIZE mode fills the Devvit iframe without fixed dimensions
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     width: 1024,
     height: 768,
   },
+  // Snap texture-based draw calls to whole-integer pixel coordinates.
+  // This eliminates sub-pixel blur caused by OS-level display scaling.
+  roundPixels: true,
+  // Keep smooth antialiasing for the vector/graphic style of this game
+  antialias: true,
   input: {
     activePointers: 3,
   },

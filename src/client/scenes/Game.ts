@@ -1,7 +1,7 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
 
-type Shape = 'triangle' | 'circle' | 'square';
+type Shape = 'yellow' | 'green' | 'purple';
 
 type FXParticle = {
   x: number;
@@ -28,7 +28,16 @@ type FXRing = {
   isFilled?: boolean;
 };
 
-type EnemyKind = 'current' | 'zombie' | 'attacker' | 'buff';
+type EnemyKind = 'current' | 'zombie' | 'attacker' | 'buff' | 'boss';
+
+type BossParticle = {
+  offsetX: number;
+  offsetY: number;
+  speed: number;
+  angle: number;
+  color: number;
+  size: number;
+};
 
 type Enemy = {
   kind: EnemyKind;
@@ -49,12 +58,23 @@ type Enemy = {
   buffKind?: 'heal' | 'speed' | 'shield';
   shape?: Shape;
   hitFlashTime?: number;
-  spawnSide?: 'top' | 'left' | 'right';
+  spawnSide?: 'top' | 'left' | 'right' | 'bottom';
   curveType?: 'sine' | 'exponential' | 'logarithmic' | 'straight';
   spawnTime?: number;
   baseX?: number;
   baseY?: number;
   color?: number;
+  maxHp?: number;
+  state?: 'spawning' | 'idle' | 'minions' | 'spread' | 'charge_windup' | 'charge' | 'shockwave' | 'cooldown';
+  stateTimer?: number;
+  attackCycle?: number;
+  particles?: BossParticle[];
+  pulseTimer?: number;
+  essenceTimer?: number;
+  chargeDirX?: number;
+  chargeDirY?: number;
+  isMinion?: boolean;
+  colorSecondary?: number;
 };
 
 type Projectile = {
@@ -65,6 +85,7 @@ type Projectile = {
   vy: number;
   radius: number;
   damage: number;
+  isRedCircle?: boolean;
 };
 
 type Token = {
@@ -103,7 +124,7 @@ type ComboDefinition = {
   id: ComboId;
   name: string;
   shortName: string;
-  requires: { triangle: number; circle: number; square: number };
+  requires: { yellow: number; green: number; purple: number };
   icons: Shape[];
 };
 
@@ -125,8 +146,8 @@ const MAX_HP = 100;
 const ZOMBIE_DAMAGE = 20;
 const ZOMBIE_RADIUS = 15;
 const ATTACKER_RADIUS = 13;
-const ATTACKER_DAMAGE_MIN = 6;
-const ATTACKER_DAMAGE_MAX = 10;
+const ATTACKER_DAMAGE_MIN = 1;
+const ATTACKER_DAMAGE_MAX = 3;
 const ATTACKER_PROJECTILE_INTERVAL_MIN = 2000;
 const ATTACKER_PROJECTILE_INTERVAL_MAX = 3000;
 const BUFF_RADIUS = 11;
@@ -134,9 +155,9 @@ const BUFF_HEAL = 20;
 const BUFF_SPEED_DURATION = 5000;
 const BUFF_SPEED_MULTIPLIER = 1.5;
 const BUFF_REPEL_DISTANCE = 80;
-const CURRENT_SPAWN_WEIGHT = 40;
-const ZOMBIE_SPAWN_WEIGHT = 20;
-const ATTACKER_SPAWN_WEIGHT = 25;
+const CURRENT_SPAWN_WEIGHT = 35;
+const ZOMBIE_SPAWN_WEIGHT = 18;
+const ATTACKER_SPAWN_WEIGHT = 22;
 
 const ENEMY_COLORS = [
   0xff1744, // Bright Red
@@ -157,18 +178,15 @@ const HP_BAR_WIDTH = 220;
 const HP_BAR_HEIGHT = 16;
 
 // Right-column spell panel
-const SPELL_SLOT_W = 90;
-const SPELL_SLOT_H = 52;
-const SPELL_SLOT_PAD = 4;
-const SPELL_COL_MARGIN = 4; // from right edge
+// Spell layout constants removed
 
 // Drag-to-move threshold (px) — below this = tap
-const TAP_THRESHOLD = 10;
+// TAP_THRESHOLD removed
 
 // Token / inventory palette
-const TOKEN_TRIANGLE_COLOR = 0xffcc00;
-const TOKEN_CIRCLE_COLOR = 0x00ff66;
-const TOKEN_SQUARE_COLOR = 0xaa44ff;
+const TOKEN_YELLOW_COLOR = 0xffcc00;
+const TOKEN_GREEN_COLOR = 0x00ff66;
+const TOKEN_PURPLE_COLOR = 0xaa44ff;
 
 // 4 spell definitions
 const COMBOS: ComboDefinition[] = [
@@ -176,29 +194,29 @@ const COMBOS: ComboDefinition[] = [
     id: 'trident',
     name: 'Tidal Spear',
     shortName: 'SPEAR',
-    requires: { triangle: 3, circle: 0, square: 0 },
-    icons: ['triangle', 'triangle', 'triangle'],
+    requires: { yellow: 3, green: 0, purple: 0 },
+    icons: ['yellow', 'yellow', 'yellow'],
   },
   {
     id: 'nova',
     name: 'Abyssal Burst',
     shortName: 'BURST',
-    requires: { triangle: 0, circle: 3, square: 0 },
-    icons: ['circle', 'circle', 'circle'],
+    requires: { yellow: 0, green: 3, purple: 0 },
+    icons: ['green', 'green', 'green'],
   },
   {
     id: 'lightning',
     name: 'Chain Lightning',
     shortName: 'LIGHTNING',
-    requires: { triangle: 0, circle: 2, square: 1 },
-    icons: ['circle', 'circle', 'square'],
+    requires: { yellow: 0, green: 2, purple: 1 },
+    icons: ['green', 'green', 'purple'],
   },
   {
     id: 'poison',
     name: 'Poison Vomit',
     shortName: 'POISON',
-    requires: { triangle: 1, circle: 1, square: 1 },
-    icons: ['triangle', 'circle', 'square'],
+    requires: { yellow: 1, green: 1, purple: 1 },
+    icons: ['yellow', 'green', 'purple'],
   },
 ];
 
@@ -218,11 +236,21 @@ const POISON_DAMAGE_CLOSE = 100;
 const POISON_WAVES = 5;
 const SPELL_LIFETIME = 3500;
 
+const BOSS_COLOR_SCHEMES = [
+  { main: 0x7B1FA2, secondary: 0xD32F2F }, // Purple/Red
+  { main: 0x005691, secondary: 0x00E5FF }, // Blue/Teal
+  { main: 0x9E0000, secondary: 0xFF5500 }, // Red/Orange
+  { main: 0x0A5C36, secondary: 0x39FF14 }, // Green/Lime
+  { main: 0x8C7300, secondary: 0xFFD700 }, // Gold/Yellow
+  { main: 0xD81B60, secondary: 0xFF4081 }, // Pink/Magenta
+];
+
 const ENEMY_HP: Record<EnemyKind, number> = {
   current: 20,
   zombie: 30,
   attacker: 15,
   buff: 10,
+  boss: 100,
 };
 
 const COMBO_WINDOW_MS = 2000;
@@ -244,9 +272,9 @@ export class Game extends Scene {
   backgroundGraphics: Phaser.GameObjects.Graphics | null = null;
   scoreText: Phaser.GameObjects.Text;
   inventoryGraphics: Phaser.GameObjects.Graphics;
-  invTriangleText: Phaser.GameObjects.Text;
-  invCircleText: Phaser.GameObjects.Text;
-  invSquareText: Phaser.GameObjects.Text;
+  invYellowText: Phaser.GameObjects.Text;
+  invGreenText: Phaser.GameObjects.Text;
+  invPurpleText: Phaser.GameObjects.Text;
   hpBar: Phaser.GameObjects.Graphics;
   hpText: Phaser.GameObjects.Text;
   shieldGraphics: Phaser.GameObjects.Graphics;
@@ -259,7 +287,7 @@ export class Game extends Scene {
   enemies: Enemy[] = [];
   tokens: Token[] = [];
   projectiles: Projectile[] = [];
-  inventory: { triangle: number; circle: number; square: number } = { triangle: 0, circle: 0, square: 0 };
+  inventory: { yellow: number; green: number; purple: number } = { yellow: 0, green: 0, purple: 0 };
   score: number = 0;
   hp: number = MAX_HP;
   hasShield: boolean = false;
@@ -283,17 +311,15 @@ export class Game extends Scene {
   layoutMode: LayoutMode = 'desktop';
   spellTouchZones: Array<{ x: number; y: number; w: number; h: number; comboIndex: number }> = [];
 
-  // Drag-to-move (replaces joystick)
-  dragActive: boolean = false;
-  dragPointerID: number = -1;
-  dragStartX: number = 0;
-  dragStartY: number = 0;
-  dragLastX: number = 0;
-  dragLastY: number = 0;
-  dragMoveDX: number = 0;
-  dragMoveDY: number = 0;
-  // Tap detection
-  tapMoved: boolean = false;
+  // Virtual Joystick
+  joystickActive: boolean = false;
+  joystickPointerID: number = -1;
+  joystickBaseX: number = 0;
+  joystickBaseY: number = 0;
+  joystickThumbX: number = 0;
+  joystickThumbY: number = 0;
+  joystickGraphics: Phaser.GameObjects.Graphics | null = null;
+  readonly JOYSTICK_MAX_RADIUS: number = 50;
 
   // Spell FX / combo streak
   spellProjectiles: SpellProjectile[] = [];
@@ -318,13 +344,35 @@ export class Game extends Scene {
   fxGraphics: Phaser.GameObjects.Graphics | null = null;
 
   // Phase 6 — daily glyph, progression, ambient
-  dailyGlyph: Shape = 'triangle';
+  dailyGlyph: Shape = 'yellow';
   dailyGlyphText: Phaser.GameObjects.Text | null = null;
+  xpEarnedText: Phaser.GameObjects.Text | null = null;
   totalKillsCount: number = 0;
   difficultySpeedMultiplier: number = 1.0;
   ambientGraphics: Phaser.GameObjects.Graphics | null = null;
   ambientParticles: Array<{ x: number; y: number; speed: number; size: number; alpha: number; angle: number; color?: number }> = [];
   lastDamageTime: number = 0;
+
+  // Progression fields
+  streakMultiplier: number = 1.0;
+  damageMultiplier: number = 1.0;
+  pickupRadius: number = PICKUP_RADIUS;
+  playerSpeed: number = PLAYER_SPEED;
+  maxHp: number = MAX_HP;
+  welcomeBonusKillsLeft: number = 0;
+  xpEarned: number = 0;
+
+  // Boss Fight system fields
+  isBossFight: boolean = false;
+  isBossSpawning: boolean = false;
+  boss: Enemy | null = null;
+  bossOverlay: Phaser.GameObjects.Graphics | null = null;
+  bossHpBarGraphics: Phaser.GameObjects.Graphics | null = null;
+  bossHpText: Phaser.GameObjects.Text | null = null;
+  bossShockwaveRing: { x: number; y: number; currentRadius: number; maxRadius: number; speed: number; active: boolean; hasHitPlayer: boolean } | null = null;
+  bossTimer: number = 20;
+  bossSpawnCount: number = 0;
+  lastBossSchemeIndex: number | undefined = undefined;
 
   constructor() {
     super('Game');
@@ -337,9 +385,34 @@ export class Game extends Scene {
     this.enemies = [];
     this.tokens = [];
     this.projectiles = [];
-    this.inventory = { triangle: 3, circle: 3, square: 3 };
-    this.score = 0;
-    this.hp = MAX_HP;
+    const upgrades = this.registry.get('playerUpgrades') || { speed: 0, damage: 0, hp: 0, pickup: 0 };
+    const welcomeBonus = this.registry.get('activeWelcomeBonus');
+
+    this.streakMultiplier = this.registry.get('streakBonusMultiplier') ?? 1.0;
+    this.damageMultiplier = 1.0 + 0.10 * (upgrades.damage || 0);
+    this.pickupRadius = PICKUP_RADIUS * (1 + 0.05 * (upgrades.pickup || 0));
+    this.playerSpeed = PLAYER_SPEED * (1 + 0.05 * (upgrades.speed || 0));
+
+    this.maxHp = MAX_HP + 10 * (upgrades.hp || 0);
+    let startingScore = 0;
+    let startingOrbs = 3; // default starting orbs
+    this.welcomeBonusKillsLeft = 0;
+
+    if (welcomeBonus) {
+      if (welcomeBonus.type === 'hp') {
+        this.maxHp += welcomeBonus.value;
+      } else if (welcomeBonus.type === 'score') {
+        startingScore = welcomeBonus.value;
+      } else if (welcomeBonus.type === 'orbs') {
+        startingOrbs += welcomeBonus.value;
+      } else if (welcomeBonus.type === 'doubleKills') {
+        this.welcomeBonusKillsLeft = welcomeBonus.value;
+      }
+    }
+
+    this.inventory = { yellow: startingOrbs, green: startingOrbs, purple: startingOrbs };
+    this.score = startingScore;
+    this.hp = this.maxHp;
     this.hasShield = false;
     this.speedBoostTimer = 0;
     this.isGameOver = false;
@@ -353,15 +426,13 @@ export class Game extends Scene {
     this.comboNameTexts = [];
     this.layoutMode = 'desktop';
     this.spellTouchZones = [];
-    this.dragActive = false;
-    this.dragPointerID = -1;
-    this.dragStartX = 0;
-    this.dragStartY = 0;
-    this.dragLastX = 0;
-    this.dragLastY = 0;
-    this.dragMoveDX = 0;
-    this.dragMoveDY = 0;
-    this.tapMoved = false;
+    this.joystickActive = false;
+    this.joystickPointerID = -1;
+    this.joystickBaseX = 0;
+    this.joystickBaseY = 0;
+    this.joystickThumbX = 0;
+    this.joystickThumbY = 0;
+    this.joystickGraphics = null;
     this.spellProjectiles = [];
     this.killTimestamps = [];
     this.killComboCount = 0;
@@ -380,21 +451,37 @@ export class Game extends Scene {
     this.tridentHits.clear();
 
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-    const shapes = ['triangle', 'circle', 'square'] as const;
+    const shapes = ['yellow', 'green', 'purple'] as const;
     this.dailyGlyph = shapes[daysSinceEpoch % 3]!;
     this.dailyGlyphText = null;
+    this.xpEarnedText = null;
     this.totalKillsCount = 0;
     this.difficultySpeedMultiplier = 1.0;
     this.ambientGraphics = null;
     this.ambientParticles = [];
     this.lastDamageTime = 0;
+
+    this.isBossFight = false;
+    this.isBossSpawning = false;
+    this.boss = null;
+    this.bossOverlay = null;
+    this.bossHpBarGraphics = null;
+    this.bossHpText = null;
+    this.bossShockwaveRing = null;
+    this.bossTimer = 20;
+    this.bossSpawnCount = 0;
+    this.lastBossSchemeIndex = undefined;
   }
 
   create() {
     this.camera = this.cameras.main;
     this.camera.setBackgroundColor(0x0a0a2a);
 
+    // Ensure multi-touch is fully supported
+    this.input.addPointer(2);
+
     this.backgroundGraphics = this.add.graphics().setDepth(1);
+    this.joystickGraphics = this.add.graphics().setDepth(100).setScrollFactor(0);
 
     // Ambient background particles
     this.ambientGraphics = this.add.graphics().setDepth(2);
@@ -419,30 +506,42 @@ export class Game extends Scene {
 
     // ── Score — top-left, fixed size, high-DPI
     this.scoreText = this.add
-      .text(12, 12, 'Score: 0', {
+      .text(12, 12, `Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`, {
         fontFamily: 'Arial, sans-serif',
         fontSize: '20px',
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 3.5,
-        resolution: 2,
+
       })
       .setScrollFactor(0)
       .setDepth(10);
 
     // ── Daily Glyph — top-left below score
     const glyphCol =
-      this.dailyGlyph === 'triangle' ? '#ffcc00'
-      : this.dailyGlyph === 'circle' ? '#00ff66'
+      this.dailyGlyph === 'yellow' ? '#ffcc00'
+      : this.dailyGlyph === 'green' ? '#00ff66'
       : '#aa44ff';
     this.dailyGlyphText = this.add
-      .text(12, 40, `★ DAILY: ${this.dailyGlyph.toUpperCase()} (2X)`, {
+      .text(12, 40, `★ DAILY BONUS: ${this.dailyGlyph.toUpperCase()} (+20 SCORE)`, {
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',
         color: glyphCol,
         stroke: '#000000',
         strokeThickness: 2.5,
-        resolution: 2,
+
+      })
+      .setScrollFactor(0)
+      .setDepth(10);
+
+    this.xpEarnedText = this.add
+      .text(12, 64, `XP Gained: 0`, {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        color: '#ffd740',
+        stroke: '#000000',
+        strokeThickness: 2.5,
+
       })
       .setScrollFactor(0)
       .setDepth(10);
@@ -456,13 +555,13 @@ export class Game extends Scene {
       color: '#ffd740',
       stroke: '#000000',
       strokeThickness: 3,
-      resolution: 2,
+
     } as const;
 
     // Will be repositioned in refreshHudLayout
-    this.invTriangleText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
-    this.invCircleText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
-    this.invSquareText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
+    this.invYellowText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
+    this.invGreenText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
+    this.invPurpleText = this.add.text(0, 0, '0', countStyle).setScrollFactor(0).setDepth(10);
 
     // ── HP bar — bottom-left
     this.hpBar = this.add.graphics().setScrollFactor(0).setDepth(10);
@@ -473,7 +572,7 @@ export class Game extends Scene {
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 2.5,
-        resolution: 2,
+
       })
       .setScrollFactor(0)
       .setDepth(10);
@@ -486,7 +585,7 @@ export class Game extends Scene {
         color: '#00ff88',
         stroke: '#000000',
         strokeThickness: 2.5,
-        resolution: 2,
+
       })
       .setScrollFactor(0)
       .setDepth(10);
@@ -505,7 +604,7 @@ export class Game extends Scene {
         color: '#ffdd44',
         stroke: '#000000',
         strokeThickness: 3.5,
-        resolution: 2,
+
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -522,7 +621,7 @@ export class Game extends Scene {
           color: '#ffffff',
           stroke: '#000000',
           strokeThickness: 2.2,
-          resolution: 2,
+  
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
@@ -589,17 +688,14 @@ export class Game extends Scene {
         return;
       }
 
-      // 3. Mobile touch: start drag tracking
-      if (this.dragPointerID === -1) {
-        this.dragPointerID = pointer.id;
-        this.dragActive = true;
-        this.dragStartX = px;
-        this.dragStartY = py;
-        this.dragLastX = px;
-        this.dragLastY = py;
-        this.dragMoveDX = 0;
-        this.dragMoveDY = 0;
-        this.tapMoved = false;
+      // 3. Mobile touch: start joystick tracking or cast
+      if (!this.joystickActive) {
+        this.joystickPointerID = pointer.id;
+        this.joystickActive = true;
+        this.joystickBaseX = pointer.x;
+        this.joystickBaseY = pointer.y;
+        this.joystickThumbX = pointer.x;
+        this.joystickThumbY = pointer.y;
       } else {
         // Multi-touch: secondary finger is used to cast/shoot immediately on tap
         this.castSpell(pointer.worldX, pointer.worldY);
@@ -608,36 +704,48 @@ export class Game extends Scene {
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.isGameOver) return;
-      if (!this.dragActive || pointer.id !== this.dragPointerID) return;
+      if (!this.joystickActive || pointer.id !== this.joystickPointerID) return;
 
-      const ddx = pointer.x - this.dragStartX;
-      const ddy = pointer.y - this.dragStartY;
-      const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+      const dx = pointer.x - this.joystickBaseX;
+      const dy = pointer.y - this.joystickBaseY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist > TAP_THRESHOLD) {
-        this.tapMoved = true;
+      if (dist > this.JOYSTICK_MAX_RADIUS) {
+        this.joystickThumbX = this.joystickBaseX + (dx / dist) * this.JOYSTICK_MAX_RADIUS;
+        this.joystickThumbY = this.joystickBaseY + (dy / dist) * this.JOYSTICK_MAX_RADIUS;
+      } else {
+        this.joystickThumbX = pointer.x;
+        this.joystickThumbY = pointer.y;
       }
-
-      // Delta from last frame position → direct movement
-      this.dragMoveDX = pointer.x - this.dragLastX;
-      this.dragMoveDY = pointer.y - this.dragLastY;
-      this.dragLastX = pointer.x;
-      this.dragLastY = pointer.y;
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.id !== this.dragPointerID) return;
+      let hitSlot = false;
+      const px = pointer.x;
+      const py = pointer.y;
+      for (const zone of this.spellTouchZones) {
+        if (px >= zone.x && px <= zone.x + zone.w && py >= zone.y && py <= zone.y + zone.h) {
+          hitSlot = true;
+          break;
+        }
+      }
 
-      if (!this.tapMoved && !this.isGameOver) {
-        // It was a tap — cast spell toward tap position
+      if (pointer.id !== this.joystickPointerID) {
+        if (!hitSlot && !this.isGameOver) {
+          this.castSpell(pointer.worldX, pointer.worldY);
+        }
+        return;
+      }
+
+      // If it was just a quick tap (joystick barely moved), cast a spell
+      const dx = this.joystickThumbX - this.joystickBaseX;
+      const dy = this.joystickThumbY - this.joystickBaseY;
+      if (!hitSlot && dx * dx + dy * dy < 100 && !this.isGameOver) {
         this.castSpell(pointer.worldX, pointer.worldY);
       }
 
-      this.dragActive = false;
-      this.dragPointerID = -1;
-      this.dragMoveDX = 0;
-      this.dragMoveDY = 0;
-      this.tapMoved = false;
+      this.joystickActive = false;
+      this.joystickPointerID = -1;
     });
 
     this.spawnTimer = this.time.addEvent({
@@ -652,8 +760,8 @@ export class Game extends Scene {
       delay: 100,
       callback: () => {
         if (!this.isGameOver) {
-          this.score += SCORE_PER_SECOND / 10;
-          this.scoreText.setText(`Score: ${Math.floor(this.score)}`);
+          this.score += (SCORE_PER_SECOND / 10) * this.streakMultiplier;
+          this.scoreText.setText(`Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`);
         }
       },
       callbackScope: this,
@@ -677,6 +785,16 @@ export class Game extends Scene {
     this.gameTime = time;
     const dt = delta / 1000;
 
+    this.checkBossTrigger(dt);
+
+    if (this.isBossSpawning) {
+      this.updateBackground(time);
+      if (this.boss) {
+        this.redrawEnemy(this.boss);
+      }
+      return;
+    }
+
     this.updateBackground(time);
     this.updatePlayerMovement(dt);
     this.updateShieldVisual();
@@ -687,6 +805,22 @@ export class Game extends Scene {
     this.updateTokens(time);
     this.updateComboDisplay(time);
     this.updateFX(dt);
+    this.drawJoystick();
+  }
+
+  drawJoystick(): void {
+    if (!this.joystickGraphics) return;
+    this.joystickGraphics.clear();
+    
+    if (this.joystickActive) {
+      // Draw outer circle
+      this.joystickGraphics.lineStyle(3, 0xffffff, 0.4);
+      this.joystickGraphics.strokeCircle(this.joystickBaseX, this.joystickBaseY, this.JOYSTICK_MAX_RADIUS);
+      
+      // Draw thumb stick
+      this.joystickGraphics.fillStyle(0xffffff, 0.7);
+      this.joystickGraphics.fillCircle(this.joystickThumbX, this.joystickThumbY, 20);
+    }
   }
 
   // ─── HUD layout ─────────────────────────────────────────────────────────────
@@ -695,22 +829,32 @@ export class Game extends Scene {
     const { width, height } = this.scale;
 
     // Inventory icons top-right
-    const invBaseX = width - 14;
+    const invBaseX = Math.round(width - 14);
     const invY = 14;
     const invStep = 32;
 
     // Square is rightmost
-    if (this.invSquareText) this.invSquareText.setPosition(invBaseX - 6, invY + 22).setOrigin(1, 0);
-    if (this.invCircleText) this.invCircleText.setPosition(invBaseX - 6 - invStep, invY + 22).setOrigin(1, 0);
-    if (this.invTriangleText) this.invTriangleText.setPosition(invBaseX - 6 - invStep * 2, invY + 22).setOrigin(1, 0);
+    if (this.invPurpleText) this.invPurpleText.setPosition(Math.round(invBaseX - 6), invY + 22).setOrigin(1, 0);
+    if (this.invGreenText) this.invGreenText.setPosition(Math.round(invBaseX - 6 - invStep), invY + 22).setOrigin(1, 0);
+    if (this.invYellowText) this.invYellowText.setPosition(Math.round(invBaseX - 6 - invStep * 2), invY + 22).setOrigin(1, 0);
 
-    // HP bar bottom-left
-    const hpBarY = height - 28;
+    // HP bar bottom-left, shifted up above combo slots
+    const hpBarY = Math.round(height - 86);
     if (this.hpText) this.hpText.setPosition(8, hpBarY - 18);
     if (this.boosterText) this.boosterText.setPosition(8, hpBarY + 14);
 
     this.drawHpBar();
     this.redrawInventoryHud();
+
+    // Redraw boss HUD elements
+    if (this.isBossFight) {
+      if (this.bossOverlay) {
+        this.bossOverlay.clear();
+        this.bossOverlay.fillStyle(0xd32f2f, 0.3);
+        this.bossOverlay.fillRect(0, 0, width, height);
+      }
+      this.drawBossHpBar();
+    }
   }
 
   // ─── Player ─────────────────────────────────────────────────────────────────
@@ -887,14 +1031,16 @@ export class Game extends Scene {
       if (this.keys.D.isDown) dx += 1;
     }
 
-    // Drag-to-move: apply delta movement from last frame
-    if (this.dragActive && this.tapMoved) {
-      // Scale drag delta to match player speed feel
-      dx += this.dragMoveDX;
-      dy += this.dragMoveDY;
-      // Reset per-frame delta after consuming
-      this.dragMoveDX = 0;
-      this.dragMoveDY = 0;
+    // Joystick movement
+    if (this.joystickActive) {
+      const jx = this.joystickThumbX - this.joystickBaseX;
+      const jy = this.joystickThumbY - this.joystickBaseY;
+      const len = Math.sqrt(jx * jx + jy * jy);
+      if (len > 0) {
+        const magnitude = len / this.JOYSTICK_MAX_RADIUS; // 0 to 1
+        dx += (jx / len) * magnitude;
+        dy += (jy / len) * magnitude;
+      }
     }
 
     const speedMult = this.speedBoostTimer > 0 ? BUFF_SPEED_MULTIPLIER : 1;
@@ -902,18 +1048,10 @@ export class Game extends Scene {
     if (dx !== 0 || dy !== 0) {
       const len = Math.sqrt(dx * dx + dy * dy);
       if (len > 0) {
-        // For WASD use normal speed, for drag use pixel delta directly (already in pixels)
-        if (this.dragActive && this.tapMoved) {
-          // Drag: direct pixel movement, capped at PLAYER_SPEED * dt * speedMult
-          const maxMove = PLAYER_SPEED * dt * speedMult;
-          const dragLen = Math.min(len, maxMove * 3);
-          dx = (dx / len) * Math.min(dragLen, maxMove * 3);
-          dy = (dy / len) * Math.min(dragLen, maxMove * 3);
-        } else {
-          const move = PLAYER_SPEED * dt * speedMult;
-          dx = (dx / len) * move;
-          dy = (dy / len) * move;
-        }
+        const move = this.playerSpeed * dt * speedMult;
+        const actualLen = Math.min(len, 1.0); // Allow partial speed for joystick tilt
+        dx = (dx / len) * move * actualLen;
+        dy = (dy / len) * move * actualLen;
       }
     }
 
@@ -979,6 +1117,7 @@ export class Game extends Scene {
         case 'zombie': this.updateZombieEnemy(e, dt, speedMult); break;
         case 'attacker': this.updateAttackerEnemy(e, _time, dt, speedMult); break;
         case 'buff': this.updateBuffEnemy(e, dt, speedMult); break;
+        case 'boss': this.updateBoss(e, dt); break;
       }
 
       if (this.enemies.includes(e)) {
@@ -994,6 +1133,12 @@ export class Game extends Scene {
   }
 
   updateCurrentEnemy(e: Enemy, dt: number, i: number, speedMult: number): void {
+    if (this.isBossFight) {
+      e.graphics.destroy();
+      this.enemies.splice(i, 1);
+      return;
+    }
+
     if (e.spawnTime === undefined) {
       e.spawnTime = this.gameTime;
       e.baseX = e.x;
@@ -1197,6 +1342,11 @@ export class Game extends Scene {
 
     e.graphics.setRotation(heading);
 
+    if (e.kind === 'boss') {
+      this.drawBoss(e);
+      return;
+    }
+
     switch (e.kind) {
       case 'current': this.drawCurrentEnemy(e.graphics, 0, 0, e.radius, e.shape!, e.color || 0xff6600); break;
       case 'zombie': this.drawZombieEnemy(e.graphics, e.radius, e.color || 0x00ff66); break;
@@ -1220,7 +1370,7 @@ export class Game extends Scene {
         this.enemies.splice(i, 1);
         break;
       case 'zombie':
-        if (this.hasShield) { this.killEnemy(e, i, 'triangle'); }
+        if (this.hasShield) { this.killEnemy(e, i, 'yellow'); }
         else {
           this.takeDamage(ZOMBIE_DAMAGE);
           e.graphics.destroy();
@@ -1228,7 +1378,7 @@ export class Game extends Scene {
         }
         break;
       case 'attacker':
-        if (this.hasShield) { this.killEnemy(e, i, 'circle'); }
+        if (this.hasShield) { this.killEnemy(e, i, 'green'); }
         else {
           const dmg = ATTACKER_DAMAGE_MIN + Math.floor(Math.random() * (ATTACKER_DAMAGE_MAX - ATTACKER_DAMAGE_MIN + 1));
           this.takeDamage(dmg);
@@ -1239,6 +1389,14 @@ export class Game extends Scene {
       case 'buff':
         this.pickUpBuff(e, i);
         break;
+      case 'boss':
+        if (this.hasShield) {
+          this.hasShield = false;
+        } else {
+          const dmg = e.state === 'charge' ? 20 : 15;
+          this.takeDamage(dmg);
+        }
+        break;
     }
   }
 
@@ -1247,16 +1405,22 @@ export class Game extends Scene {
   }
 
   damageEnemy(e: Enemy, i: number, amount: number, spellId?: ComboId): void {
-    e.hp -= amount;
+    if (e.kind === 'buff') return;
+    const scaledAmount = amount * this.damageMultiplier;
+    e.hp -= scaledAmount;
     e.hitFlashTime = this.gameTime + 100;
     this.redrawEnemy(e);
 
     if (e.hp <= 0) {
-      const dropMap: Record<EnemyKind, Shape> = {
-        current: e.shape || 'triangle',
-        zombie: 'triangle',
-        attacker: 'circle',
-        buff: 'square',
+      if (e.kind === 'boss') {
+        this.defeatBoss(e);
+        return;
+      }
+      const dropMap: Record<Exclude<EnemyKind, 'boss'>, Shape> = {
+        current: e.shape || 'yellow',
+        zombie: 'yellow',
+        attacker: 'green',
+        buff: 'purple',
       };
       this.killEnemyWithFX(e, i, dropMap[e.kind], spellId);
     }
@@ -1267,6 +1431,9 @@ export class Game extends Scene {
     this.hasShield = false;
     e.graphics.destroy();
     this.enemies.splice(i, 1);
+
+    for (const p of this.projectiles) p.graphics.destroy();
+    this.projectiles = [];
 
     this.cameras.main.shake(50, 0.02);
 
@@ -1289,14 +1456,20 @@ export class Game extends Scene {
       maxLife: 350,
     });
 
+    let killScore = KILL_SCORE_BASE * this.streakMultiplier;
+    if (this.welcomeBonusKillsLeft > 0) {
+      killScore *= 2;
+      this.welcomeBonusKillsLeft--;
+    }
+
     const txt = this.add
-      .text(e.x, e.y - 10, '+10', {
+      .text(e.x, e.y - 10, `+${Math.floor(killScore)}`, {
         fontFamily: 'Arial Black',
         fontSize: '14px',
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 4,
-        resolution: 2,
+
       })
       .setOrigin(0.5)
       .setDepth(15);
@@ -1309,8 +1482,14 @@ export class Game extends Scene {
     });
 
     this.killTimestamps.push(this.gameTime);
-    this.score += KILL_SCORE_BASE;
-    this.scoreText.setText(`Score: ${Math.floor(this.score)}`);
+    this.score += killScore;
+    this.scoreText.setText(`Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`);
+
+    let xpAmount = 1;
+    if (e.kind === 'zombie' || e.kind === 'attacker') {
+      xpAmount = 2;
+    }
+    this.addXp(xpAmount, e.x, e.y);
 
     this.totalKillsCount++;
     if (this.totalKillsCount % 10 === 0) {
@@ -1338,7 +1517,7 @@ export class Game extends Scene {
         color: '#ff3366',
         stroke: '#000000',
         strokeThickness: 6,
-        resolution: 2,
+
         align: 'center',
       })
       .setOrigin(0.5)
@@ -1398,7 +1577,7 @@ export class Game extends Scene {
     }
 
     // High density spray of tiny particles
-    const shapes: Array<Shape | 'star'> = ['triangle', 'circle', 'square', 'star'];
+    const shapes: Array<Shape | 'star'> = ['yellow', 'green', 'purple', 'star'];
     for (let i = 0; i < 60; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 90 + Math.random() * 220;
@@ -1440,15 +1619,19 @@ export class Game extends Scene {
   }
 
   pickUpBuff(e: Enemy, i: number): void {
+    // Always heal the player when picking up a buff orb
+    this.hp = Math.min(this.maxHp, this.hp + BUFF_HEAL);
+    this.drawHpBar();
+
+    // Sometimes grant an extra bonus buff
     const roll = Math.random();
-    if (roll < 0.34) {
-      this.hp = Math.min(MAX_HP, this.hp + BUFF_HEAL);
-      this.drawHpBar();
-    } else if (roll < 0.67) {
+    if (roll < 0.25) {
       this.speedBoostTimer = BUFF_SPEED_DURATION;
-    } else {
+    } else if (roll < 0.5) {
       this.hasShield = true;
     }
+
+    this.addXp(1, e.x, e.y);
     e.graphics.destroy();
     this.enemies.splice(i, 1);
   }
@@ -1465,6 +1648,15 @@ export class Game extends Scene {
 
   spawnEnemy(): void {
     if (this.isGameOver) return;
+    
+    if (this.isBossFight) {
+      // Allow only health orbs during boss fight, and spawn them more frequently
+      if (Math.random() < 0.4) {
+        this.buildBuffEnemy();
+      }
+      return;
+    }
+    
     switch (this.pickEnemyKind()) {
       case 'current': this.buildCurrentEnemy(); break;
       case 'zombie': this.buildZombieEnemy(); break;
@@ -1474,13 +1666,12 @@ export class Game extends Scene {
   }
 
   buildCurrentEnemy(): void {
-    const shapes = ['triangle', 'circle', 'square'] as const;
+    const shapes = ['yellow', 'green', 'purple'] as const;
     const shape = shapes[Math.floor(Math.random() * shapes.length)]!;
     const radius = 9 + Math.random() * 10;
     const speed = (60 + Math.random() * 80) * this.difficultySpeedMultiplier;
 
-    // Randomly select spawn side: top, left, right
-    const sides = ['top', 'left', 'right'] as const;
+    const sides = ['top', 'bottom', 'left', 'right'] as const;
     const spawnSide = sides[Math.floor(Math.random() * sides.length)]!;
 
     // Randomly select curve: sine, exponential, logarithmic, straight
@@ -1490,19 +1681,35 @@ export class Game extends Scene {
     const { width, height } = this.scale;
     let x: number;
     let y: number;
-    const dirX = Math.random() < 0.5 ? -1 : 1;
-    const dirY = Math.random() < 0.5 ? -1 : 1;
+    let dirX: number;
+    let dirY: number;
 
     if (spawnSide === 'top') {
       x = radius + Math.random() * (width - radius * 2);
       y = -radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = 1;
+    } else if (spawnSide === 'bottom') {
+      x = radius + Math.random() * (width - radius * 2);
+      y = height + radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = -1;
     } else if (spawnSide === 'left') {
       x = -radius;
-      y = radius + Math.random() * (height * 0.6); // spawn in upper 60%
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = 1;
+      dirY = (Math.random() - 0.5) * 0.6;
     } else {
       x = width + radius;
-      y = radius + Math.random() * (height * 0.6);
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = -1;
+      dirY = (Math.random() - 0.5) * 0.6;
     }
+
+    // Normalize dirX and dirY
+    const len = Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX /= len;
+    dirY /= len;
 
     const graphics = this.add.graphics().setDepth(5);
     const enemy: Enemy = {
@@ -1531,29 +1738,34 @@ export class Game extends Scene {
   buildZombieEnemy(): void {
     const radius = ZOMBIE_RADIUS;
     const speed = (30 + Math.random() * 10) * this.difficultySpeedMultiplier;
-    // Spawn from top edge or left/right edges only — never inside the screen
-    const { width } = this.scale;
-    const side = Math.random();
+    const side = Math.floor(Math.random() * 4);
     let x: number;
     let y: number;
     let dirX: number;
     let dirY: number;
-    if (side < 0.6) {
+    const { width, height } = this.scale;
+    if (side === 0) {
       // Top edge
       x = radius + Math.random() * (width - radius * 2);
       y = -radius;
       dirX = (Math.random() - 0.5) * 0.6;
       dirY = 1;
-    } else if (side < 0.8) {
+    } else if (side === 1) {
+      // Bottom edge
+      x = radius + Math.random() * (width - radius * 2);
+      y = height + radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = -1;
+    } else if (side === 2) {
       // Left edge
       x = -radius;
-      y = Math.random() * (this.scale.height * 0.6);
+      y = radius + Math.random() * (height - radius * 2);
       dirX = 1;
       dirY = (Math.random() - 0.5) * 0.6;
     } else {
       // Right edge
       x = width + radius;
-      y = Math.random() * (this.scale.height * 0.6);
+      y = radius + Math.random() * (height - radius * 2);
       dirX = -1;
       dirY = (Math.random() - 0.5) * 0.6;
     }
@@ -1574,17 +1786,47 @@ export class Game extends Scene {
   buildAttackerEnemy(): void {
     const radius = ATTACKER_RADIUS;
     const speed = (40 + Math.random() * 20) * this.difficultySpeedMultiplier;
-    // Always spawn from top edge
-    const x = radius + Math.random() * (this.scale.width - radius * 2);
-    const y = -radius;
+    const side = Math.floor(Math.random() * 4);
+    let x: number;
+    let y: number;
+    let dirX: number;
+    let dirY: number;
+    const { width, height } = this.scale;
+    if (side === 0) {
+      // Top edge
+      x = radius + Math.random() * (width - radius * 2);
+      y = -radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = 1;
+    } else if (side === 1) {
+      // Bottom edge
+      x = radius + Math.random() * (width - radius * 2);
+      y = height + radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = -1;
+    } else if (side === 2) {
+      // Left edge
+      x = -radius;
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = 1;
+      dirY = (Math.random() - 0.5) * 0.6;
+    } else {
+      // Right edge
+      x = width + radius;
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = -1;
+      dirY = (Math.random() - 0.5) * 0.6;
+    }
+    const len = Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX /= len; dirY /= len;
+
     const modes: Array<'wander' | 'zigzag' | 'chase'> = ['wander', 'zigzag', 'chase'];
     const movementMode = modes[Math.floor(Math.random() * modes.length)]!;
     const graphics = this.add.graphics().setDepth(5);
     const enemy: Enemy = {
       kind: 'attacker', graphics, x, y, radius, speed,
       hp: ENEMY_HP.attacker, slowTimer: 0,
-      dirX: (Math.random() - 0.5) * 0.4,
-      dirY: 1,
+      dirX, dirY,
       nextDirTimer: 2000, movementMode,
       projectileTimer: ATTACKER_PROJECTILE_INTERVAL_MIN + Math.random() * (ATTACKER_PROJECTILE_INTERVAL_MAX - ATTACKER_PROJECTILE_INTERVAL_MIN),
       damageMin: ATTACKER_DAMAGE_MIN, damageMax: ATTACKER_DAMAGE_MAX,
@@ -1597,17 +1839,47 @@ export class Game extends Scene {
   buildBuffEnemy(): void {
     const radius = BUFF_RADIUS;
     const speed = (20 + Math.random() * 15) * this.difficultySpeedMultiplier;
-    // Spawn from top edge
-    const x = radius + Math.random() * (this.scale.width - radius * 2);
-    const y = -radius;
-    const buffKinds: Array<'heal' | 'speed' | 'shield'> = ['heal', 'speed', 'shield'];
+    const side = Math.floor(Math.random() * 4);
+    let x: number;
+    let y: number;
+    let dirX: number;
+    let dirY: number;
+    const { width, height } = this.scale;
+    if (side === 0) {
+      // Top edge
+      x = radius + Math.random() * (width - radius * 2);
+      y = -radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = 1;
+    } else if (side === 1) {
+      // Bottom edge
+      x = radius + Math.random() * (width - radius * 2);
+      y = height + radius;
+      dirX = (Math.random() - 0.5) * 0.6;
+      dirY = -1;
+    } else if (side === 2) {
+      // Left edge
+      x = -radius;
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = 1;
+      dirY = (Math.random() - 0.5) * 0.6;
+    } else {
+      // Right edge
+      x = width + radius;
+      y = radius + Math.random() * (height - radius * 2);
+      dirX = -1;
+      dirY = (Math.random() - 0.5) * 0.6;
+    }
+    const len = Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX /= len; dirY /= len;
+
+    const buffKinds: Array<'heal' | 'speed' | 'shield'> = ['heal', 'heal', 'speed', 'shield'];
     const buffKind = buffKinds[Math.floor(Math.random() * buffKinds.length)]!;
     const graphics = this.add.graphics().setDepth(5);
     const enemy: Enemy = {
       kind: 'buff', graphics, x, y, radius, speed,
       hp: ENEMY_HP.buff, slowTimer: 0,
-      dirX: (Math.random() - 0.5) * 0.4,
-      dirY: 1,
+      dirX, dirY,
       nextDirTimer: 1500, buffKind,
       color: 0xffd740,
     };
@@ -1620,9 +1892,9 @@ export class Game extends Scene {
   drawCurrentEnemy(g: Phaser.GameObjects.Graphics, cx: number, cy: number, radius: number, shape: Shape, bodyColor: number): void {
     const heading = Math.PI / 2;
     switch (shape) {
-      case 'triangle': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffffff, heading); break;
-      case 'circle': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffee58, heading); break;
-      case 'square': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xfff176, heading); break;
+      case 'yellow': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffffff, heading); break;
+      case 'green': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xffee58, heading); break;
+      case 'purple': this.drawSmallFish(g, cx, cy, radius, bodyColor, 0xfff176, heading); break;
     }
   }
 
@@ -1826,6 +2098,13 @@ export class Game extends Scene {
 
   drawProjectile(p: Projectile): void {
     p.graphics.clear();
+    if (p.isRedCircle) {
+      p.graphics.fillStyle(0xff1744, 1.0);
+      p.graphics.fillCircle(p.x, p.y, p.radius);
+      p.graphics.lineStyle(1.5, 0xffffff, 1.0);
+      p.graphics.strokeCircle(p.x, p.y, p.radius);
+      return;
+    }
     const heading = Math.atan2(p.vy, p.vx);
     const cos = Math.cos(heading);
     const sin = Math.sin(heading);
@@ -1865,22 +2144,22 @@ export class Game extends Scene {
       this.drawToken(t, vibeY, vibeX);
 
       const dist = Phaser.Math.Distance.Between(this.playerX, this.playerY, t.x, t.y);
-      if (dist < PICKUP_RADIUS) {
+      if (dist < this.pickupRadius) {
         this.inventory[t.shape]++;
 
         const isDaily = t.shape === this.dailyGlyph;
-        const scoreGain = isDaily ? 20 : 10;
+        const scoreGain = (isDaily ? 20 : 10) * this.streakMultiplier;
         this.score += scoreGain;
-        this.scoreText.setText(`Score: ${Math.floor(this.score)}`);
+        this.scoreText.setText(`Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`);
 
         const txt = this.add
-          .text(t.x, vibeY - 10, isDaily ? '+20 DAILY! ★' : '+10', {
+          .text(t.x, vibeY - 10, isDaily ? `+${Math.floor(scoreGain)} DAILY! ★` : `+${Math.floor(scoreGain)}`, {
             fontFamily: 'Arial Black',
             fontSize: '12px',
             color: isDaily ? '#ffcc00' : '#ffffff',
             stroke: '#000000',
             strokeThickness: 2.5,
-            resolution: 2,
+    
           })
           .setOrigin(0.5)
           .setDepth(15);
@@ -1909,7 +2188,7 @@ export class Game extends Scene {
 
   spawnAmbientPotionOrb(): void {
     if (this.isGameOver) return;
-    const shapes = ['triangle', 'circle', 'square'] as const;
+    const shapes = ['yellow', 'green', 'purple'] as const;
     const shape = shapes[Math.floor(Math.random() * shapes.length)]!;
 
     // Spawn at random location leaving screen margins
@@ -1924,9 +2203,9 @@ export class Game extends Scene {
     t.graphics.clear();
 
     const color =
-      t.shape === 'triangle' ? TOKEN_TRIANGLE_COLOR
-      : t.shape === 'circle' ? TOKEN_CIRCLE_COLOR
-      : TOKEN_SQUARE_COLOR;
+      t.shape === 'yellow' ? TOKEN_YELLOW_COLOR
+      : t.shape === 'green' ? TOKEN_GREEN_COLOR
+      : TOKEN_PURPLE_COLOR;
 
     t.graphics.fillStyle(color, 0.3);
     t.graphics.fillCircle(x, y, t.radius + 6);
@@ -1938,19 +2217,8 @@ export class Game extends Scene {
 
     t.graphics.fillStyle(0xffffff, 0.85);
     t.graphics.lineStyle(1.0, color, 1.0);
-    switch (t.shape) {
-      case 'triangle': this.drawTriangle(t.graphics, x, y, t.radius * 0.45); break;
-      case 'circle':
-        t.graphics.fillCircle(x, y, t.radius * 0.4);
-        t.graphics.strokeCircle(x, y, t.radius * 0.4);
-        break;
-      case 'square': {
-        const h = t.radius * 0.35;
-        t.graphics.fillRect(x - h, y - h, h * 2, h * 2);
-        t.graphics.strokeRect(x - h, y - h, h * 2, h * 2);
-        break;
-      }
-    }
+    t.graphics.fillCircle(x, y, t.radius * 0.45);
+    t.graphics.strokeCircle(x, y, t.radius * 0.45);
 
     t.graphics.fillStyle(0xffffff, 0.95);
     t.graphics.fillCircle(x - t.radius * 0.35, y - t.radius * 0.35, 1.8);
@@ -1962,7 +2230,7 @@ export class Game extends Scene {
     if (!this.hpBar) return;
     this.hpBar.clear();
     const { height } = this.scale;
-    const barY = height - 32; // adjusted slightly upward to match larger height
+    const barY = height - 90; // shifted up above combo slots
     const barX = 8;
 
     // Glowing outline if low health (<= 30%)
@@ -1977,7 +2245,7 @@ export class Game extends Scene {
     this.hpBar.fillRect(barX, barY, HP_BAR_WIDTH, HP_BAR_HEIGHT);
 
     // HP Fill
-    const fillWidth = (this.hp / MAX_HP) * HP_BAR_WIDTH;
+    const fillWidth = (this.hp / this.maxHp) * HP_BAR_WIDTH;
     const fillColor = this.hp > 50 ? 0x44ff44 : this.hp > 30 ? 0xffaa00 : 0xff0000;
     this.hpBar.fillStyle(fillColor, 1);
     this.hpBar.fillRect(barX, barY, fillWidth, HP_BAR_HEIGHT);
@@ -1994,9 +2262,9 @@ export class Game extends Scene {
     if (!this.inventoryGraphics) return;
     const { width } = this.scale;
     const icons: { shape: Shape; color: number }[] = [
-      { shape: 'triangle', color: TOKEN_TRIANGLE_COLOR },
-      { shape: 'circle', color: TOKEN_CIRCLE_COLOR },
-      { shape: 'square', color: TOKEN_SQUARE_COLOR },
+      { shape: 'yellow', color: TOKEN_YELLOW_COLOR },
+      { shape: 'green', color: TOKEN_GREEN_COLOR },
+      { shape: 'purple', color: TOKEN_PURPLE_COLOR },
     ];
     const y = 18;
     const step = 32;
@@ -2013,57 +2281,32 @@ export class Game extends Scene {
 
       this.inventoryGraphics.fillStyle(icon.color, 1);
       this.inventoryGraphics.lineStyle(1.5, 0xffffff, 0.8);
-      switch (icon.shape) {
-        case 'triangle': this.drawTriangle(this.inventoryGraphics, iconX, y, 10); break;
-        case 'circle':
-          this.inventoryGraphics.fillCircle(iconX, y, 10);
-          this.inventoryGraphics.strokeCircle(iconX, y, 10);
-          break;
-        case 'square':
-          this.inventoryGraphics.fillRect(iconX - 10, y - 10, 20, 20);
-          this.inventoryGraphics.strokeRect(iconX - 10, y - 10, 20, 20);
-          break;
-      }
+      this.inventoryGraphics.fillCircle(iconX, y, 10);
+      this.inventoryGraphics.strokeCircle(iconX, y, 10);
     }
 
     // Reposition count texts
-    const squareX = baseX - 20;
-    const circleX = baseX - 20 - step;
-    const triangleX = baseX - 20 - step * 2;
+    const purpleX = baseX - 20;
+    const greenX = baseX - 20 - step;
+    const yellowX = baseX - 20 - step * 2;
 
-    if (this.invSquareText) {
-      this.invSquareText.setText(`${this.inventory.square}`);
-      this.invSquareText.setPosition(squareX + 14, y + 10).setOrigin(1, 0);
+    if (this.invPurpleText) {
+      this.invPurpleText.setText(`${this.inventory.purple}`);
+      this.invPurpleText.setPosition(purpleX + 14, y + 10).setOrigin(1, 0);
     }
-    if (this.invCircleText) {
-      this.invCircleText.setText(`${this.inventory.circle}`);
-      this.invCircleText.setPosition(circleX + 14, y + 10).setOrigin(1, 0);
+    if (this.invGreenText) {
+      this.invGreenText.setText(`${this.inventory.green}`);
+      this.invGreenText.setPosition(greenX + 14, y + 10).setOrigin(1, 0);
     }
-    if (this.invTriangleText) {
-      this.invTriangleText.setText(`${this.inventory.triangle}`);
-      this.invTriangleText.setPosition(triangleX + 14, y + 10).setOrigin(1, 0);
+    if (this.invYellowText) {
+      this.invYellowText.setText(`${this.inventory.yellow}`);
+      this.invYellowText.setPosition(yellowX + 14, y + 10).setOrigin(1, 0);
     }
   }
 
   // ─── Primitive helpers ───────────────────────────────────────────────────────
 
-  drawTriangle(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
-    const a = Math.PI / 2;
-    const x1 = cx + r * Math.cos(a);
-    const y1 = cy - r * Math.sin(a);
-    const x2 = cx + r * Math.cos(a + (2 * Math.PI) / 3);
-    const y2 = cy - r * Math.sin(a + (2 * Math.PI) / 3);
-    const x3 = cx + r * Math.cos(a + (4 * Math.PI) / 3);
-    const y3 = cy - r * Math.sin(a + (4 * Math.PI) / 3);
 
-    g.beginPath();
-    g.moveTo(x1, y1);
-    g.lineTo(x2, y2);
-    g.lineTo(x3, y3);
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
-  }
 
   drawStar(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
     g.fillStyle(0xfff0aa, 1);
@@ -2087,9 +2330,9 @@ export class Game extends Scene {
 
   isAffordable(combo: ComboDefinition): boolean {
     return (
-      this.inventory.triangle >= combo.requires.triangle &&
-      this.inventory.circle >= combo.requires.circle &&
-      this.inventory.square >= combo.requires.square
+      this.inventory.yellow >= combo.requires.yellow &&
+      this.inventory.green >= combo.requires.green &&
+      this.inventory.purple >= combo.requires.purple
     );
   }
 
@@ -2098,9 +2341,9 @@ export class Game extends Scene {
     const combo = COMBOS[this.selectedCombo]!;
     if (!this.isAffordable(combo)) return;
 
-    this.inventory.triangle -= combo.requires.triangle;
-    this.inventory.circle -= combo.requires.circle;
-    this.inventory.square -= combo.requires.square;
+    this.inventory.yellow -= combo.requires.yellow;
+    this.inventory.green -= combo.requires.green;
+    this.inventory.purple -= combo.requires.purple;
 
     this.redrawInventoryHud();
     this.redrawComboBar();
@@ -2187,7 +2430,7 @@ export class Game extends Scene {
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             color: p % 2 === 0 ? 0xffffff : 0x88ccff,
-            shape: Math.random() < 0.5 ? 'circle' : 'star',
+            shape: Math.random() < 0.5 ? 'green' : 'star',
             alpha: 0.9,
             size: 2 + Math.random() * 5,
             life: 0,
@@ -2200,6 +2443,7 @@ export class Game extends Scene {
         let hitCount = 0;
         for (let i = list.length - 1; i >= 0; i--) {
           const e = list[i]!;
+          if (e.kind === 'buff') continue;
           const d = Phaser.Math.Distance.Between(mx, my, e.x, e.y);
           if (d <= NOVA_RADIUS) {
             const idx = this.enemies.indexOf(e);
@@ -2227,6 +2471,7 @@ export class Game extends Scene {
           let closestDist = range;
 
           for (const e of this.enemies) {
+            if (e.kind === 'buff') continue;
             if (hitSet.has(e)) continue;
             const d = Phaser.Math.Distance.Between(currentSourceX, currentSourceY, e.x, e.y);
             if (d < closestDist) { closestDist = d; closestEnemy = e; }
@@ -2253,7 +2498,7 @@ export class Game extends Scene {
             color: '#ffdd44',
             stroke: '#000000',
             strokeThickness: 5,
-            resolution: 2,
+    
           }).setOrigin(0.5).setDepth(15);
 
           this.tweens.add({
@@ -2319,7 +2564,7 @@ export class Game extends Scene {
               vx: Math.cos(pAngle) * speed,
               vy: Math.sin(pAngle) * speed,
               color: 0x44ff44,
-              shape: 'circle',
+              shape: 'green',
               alpha: 0.85,
               size: 3 + Math.random() * 5,
               life: wave * 60,
@@ -2332,7 +2577,7 @@ export class Game extends Scene {
               vx: Math.cos(pAngle) * speed * 0.6 + (Math.random() - 0.5) * 40,
               vy: Math.sin(pAngle) * speed * 0.6 + (Math.random() - 0.5) * 40,
               color: 0xaaff44,
-              shape: 'circle',
+              shape: 'green',
               alpha: 0.6,
               size: 2 + Math.random() * 3,
               life: wave * 60,
@@ -2346,6 +2591,7 @@ export class Game extends Scene {
         let poisonHits = 0;
         for (let i = list.length - 1; i >= 0; i--) {
           const e = list[i]!;
+          if (e.kind === 'buff') continue;
           const edx = e.x - this.playerX;
           const edy = e.y - this.playerY;
           const dist = Math.sqrt(edx * edx + edy * edy);
@@ -2360,12 +2606,9 @@ export class Game extends Scene {
 
           if (Math.abs(angleDiff) > POISON_CONE_HALF_ANGLE) continue;
 
-          let damage = 0;
-          if (dist <= 100) {
-            damage = POISON_DAMAGE_CLOSE;
-          } else {
-            damage = POISON_DAMAGE_CLOSE * (1 - (dist - 100) / (POISON_RANGE - 100));
-          }
+          const damage = dist <= 100
+            ? POISON_DAMAGE_CLOSE
+            : POISON_DAMAGE_CLOSE * (1 - (dist - 100) / (POISON_RANGE - 100));
 
           const idx = this.enemies.indexOf(e);
           if (idx !== -1) {
@@ -2411,7 +2654,7 @@ export class Game extends Scene {
           vx: (Math.random() - 0.5) * 40 - p.vx * 0.12,
           vy: (Math.random() - 0.5) * 40 - p.vy * 0.12,
           color: col,
-          shape: 'circle',
+          shape: 'green',
           alpha: 0.85,
           size: 1.2 + Math.random() * 1.8,
           life: 0,
@@ -2425,6 +2668,7 @@ export class Game extends Scene {
       let collided = false;
       for (let j = list.length - 1; j >= 0; j--) {
         const e = list[j]!;
+        if (e.kind === 'buff') continue;
         if (p.hitEnemies.has(e)) continue;
         const d = Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y);
         if (d < e.radius + 6) {
@@ -2546,43 +2790,22 @@ export class Game extends Scene {
     this.spellTouchZones = [];
 
     const { width, height } = this.scale;
-    const mode = this.layoutMode;
+    
+    // Always use bottom row horizontally centered
+    const slotW = Math.min(100, Math.floor((width - 8) / COMBOS.length) - 4);
+    const slotH = 52;
+    const slotPad = 4;
+    const totalW = COMBOS.length * slotW + (COMBOS.length - 1) * slotPad;
+    const startX = (width - totalW) / 2;
+    const startY = height - slotH - 8;
 
-    if (mode === 'desktop') {
-      // Right column — vertically centered
-      const slotW = SPELL_SLOT_W;
-      const slotH = SPELL_SLOT_H;
-      const slotPad = SPELL_SLOT_PAD;
-      const totalH = COMBOS.length * slotH + (COMBOS.length - 1) * slotPad;
-      const startY = (height - totalH) / 2;
-      const startX = width - slotW - SPELL_COL_MARGIN;
-
-      for (let i = 0; i < COMBOS.length; i++) {
-        const combo = COMBOS[i]!;
-        const slotY = startY + i * (slotH + slotPad);
-        const canCast = this.isAffordable(combo);
-        const isSel = i === this.selectedCombo;
-        this.drawComboSlot(startX, slotY, slotW, slotH, i, combo, canCast, isSel, false);
-        this.spellTouchZones.push({ x: startX, y: slotY, w: slotW, h: slotH, comboIndex: i });
-      }
-    } else {
-      // Mobile: bottom row — horizontally centered
-      const isLandscape = mode === 'mobileLandscape';
-      const slotW = isLandscape ? 78 : Math.floor((width - 8) / COMBOS.length) - 4;
-      const slotH = isLandscape ? 46 : 52;
-      const slotPad = 4;
-      const totalW = COMBOS.length * slotW + (COMBOS.length - 1) * slotPad;
-      const startX = (width - totalW) / 2;
-      const startY = height - slotH - 2;
-
-      for (let i = 0; i < COMBOS.length; i++) {
-        const combo = COMBOS[i]!;
-        const slotX = startX + i * (slotW + slotPad);
-        const canCast = this.isAffordable(combo);
-        const isSel = i === this.selectedCombo;
-        this.drawComboSlot(slotX, startY, slotW, slotH, i, combo, canCast, isSel, true);
-        this.spellTouchZones.push({ x: slotX, y: startY, w: slotW, h: slotH, comboIndex: i });
-      }
+    for (let i = 0; i < COMBOS.length; i++) {
+      const combo = COMBOS[i]!;
+      const slotX = startX + i * (slotW + slotPad);
+      const canCast = this.isAffordable(combo);
+      const isSel = i === this.selectedCombo;
+      this.drawComboSlot(slotX, startY, slotW, slotH, i, combo, canCast, isSel, true);
+      this.spellTouchZones.push({ x: slotX, y: startY, w: slotW, h: slotH, comboIndex: i });
     }
   }
 
@@ -2631,9 +2854,9 @@ export class Game extends Scene {
       const shape = combo.icons[j]!;
       const ix = iconStartX + j * iconStep;
       const col =
-        shape === 'triangle' ? TOKEN_TRIANGLE_COLOR
-        : shape === 'circle' ? TOKEN_CIRCLE_COLOR
-        : TOKEN_SQUARE_COLOR;
+        shape === 'yellow' ? TOKEN_YELLOW_COLOR
+        : shape === 'green' ? TOKEN_GREEN_COLOR
+        : TOKEN_PURPLE_COLOR;
       g.fillStyle(col, iconAlpha);
       g.lineStyle(1, 0xffffff, iconAlpha * 0.65);
       this.drawShapeIcon(g, ix, iconRowY, ir, shape);
@@ -2654,20 +2877,9 @@ export class Game extends Scene {
     }
   }
 
-  drawShapeIcon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, shape: Shape): void {
-    switch (shape) {
-      case 'triangle': this.drawTriangle(g, cx, cy, r); break;
-      case 'circle':
-        g.fillCircle(cx, cy, r);
-        g.strokeCircle(cx, cy, r);
-        break;
-      case 'square': {
-        const h = r * 0.85;
-        g.fillRect(cx - h, cy - h, h * 2, h * 2);
-        g.strokeRect(cx - h, cy - h, h * 2, h * 2);
-        break;
-      }
-    }
+  drawShapeIcon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, _shape: Shape): void {
+    g.fillCircle(cx, cy, r);
+    g.strokeCircle(cx, cy, r);
   }
 
   // ─── End game & visual FX ────────────────────────────────────────────────────
@@ -2698,6 +2910,23 @@ export class Game extends Scene {
 
     if (!this.fxGraphics) return;
     this.fxGraphics.clear();
+
+    // Draw boss shockwave ring
+    if (this.bossShockwaveRing && this.bossShockwaveRing.active) {
+      const ring = this.bossShockwaveRing;
+      const alpha = 1.0 - (ring.currentRadius / ring.maxRadius);
+      this.fxGraphics.lineStyle(4, 0x7B1FA2, alpha);
+      this.fxGraphics.strokeCircle(ring.x, ring.y, ring.currentRadius);
+
+      const particleCount = 16;
+      this.fxGraphics.fillStyle(0x7B1FA2, alpha);
+      for (let j = 0; j < particleCount; j++) {
+        const pAngle = (j * Math.PI * 2) / particleCount;
+        const px = ring.x + Math.cos(pAngle) * ring.currentRadius;
+        const py = ring.y + Math.sin(pAngle) * ring.currentRadius;
+        this.fxGraphics.fillCircle(px, py, 3);
+      }
+    }
 
     const dtMs = dt * 1000;
 
@@ -2735,17 +2964,11 @@ export class Game extends Scene {
   }
 
   drawFXParticle(g: Phaser.GameObjects.Graphics, x: number, y: number, size: number, shape: Shape | 'star'): void {
-    switch (shape) {
-      case 'triangle': this.drawTriangle(g, x, y, size); break;
-      case 'circle':
-        g.fillCircle(x, y, size);
-        g.strokeCircle(x, y, size);
-        break;
-      case 'square':
-        g.fillRect(x - size, y - size, size * 2, size * 2);
-        g.strokeRect(x - size, y - size, size * 2, size * 2);
-        break;
-      case 'star': this.drawStar(g, x, y, size); break;
+    if (shape === 'star') {
+      this.drawStar(g, x, y, size);
+    } else {
+      g.fillCircle(x, y, size);
+      g.strokeCircle(x, y, size);
     }
   }
 
@@ -2843,6 +3066,30 @@ export class Game extends Scene {
     }
   }
 
+  addXp(amount: number, x: number, y: number): void {
+    this.xpEarned += amount;
+    if (this.xpEarnedText) {
+      this.xpEarnedText.setText(`XP Gained: ${this.xpEarned}`);
+    }
+
+    const txt = this.add.text(x, y - 25, `+${amount} XP`, {
+      fontFamily: 'Arial Black',
+      fontSize: '11px',
+      color: '#ffd740',
+      stroke: '#000000',
+      strokeThickness: 3,
+
+    }).setOrigin(0.5).setDepth(15);
+
+    this.tweens.add({
+      targets: txt,
+      y: y - 60,
+      alpha: 0,
+      duration: 800,
+      onComplete: () => txt.destroy(),
+    });
+  }
+
   endGame(): void {
     this.isGameOver = true;
     if (this.spawnTimer) this.spawnTimer.destroy();
@@ -2861,6 +3108,7 @@ export class Game extends Scene {
     if (this.blazeGraphics) this.blazeGraphics.destroy();
     if (this.fxGraphics) this.fxGraphics.destroy();
     if (this.dailyGlyphText) this.dailyGlyphText.destroy();
+    if (this.xpEarnedText) this.xpEarnedText.destroy();
     if (this.ambientGraphics) this.ambientGraphics.destroy();
 
     if (this.playerGraphics) {
@@ -2874,13 +3122,661 @@ export class Game extends Scene {
     }
 
     this.time.delayedCall(800, () => {
+      const bossPercent = (this.isBossFight && this.boss) 
+        ? Math.max(0, Math.min(100, Math.floor((1 - this.boss.hp / this.boss.maxHp!) * 100))) 
+        : undefined;
+
+      // Clean up boss overlay and HP bar elements just in case
+      if (this.bossOverlay) this.bossOverlay.destroy();
+      if (this.bossHpBarGraphics) this.bossHpBarGraphics.destroy();
+      if (this.bossHpText) this.bossHpText.destroy();
+
       this.scene.start('GameOver', {
         score: Math.floor(this.score),
         bestTridentChain: this.bestTridentChain,
         bestLightningChain: this.bestLightningChain,
         bestNovaChain: this.bestNovaChain,
         bestPoisonChain: this.bestPoisonChain,
+        xpEarned: this.xpEarned,
+        bossPercentReached: bossPercent,
       });
     });
+  }
+
+  // ─── Boss Fight System ───────────────────────────────────────────────────────
+
+  checkBossTrigger(dt: number): void {
+    if (this.isBossFight || this.isGameOver) return;
+    this.bossTimer -= dt;
+    if (this.bossTimer <= 0) {
+      this.triggerBossFight();
+    }
+  }
+
+  triggerBossFight(): void {
+    if (this.isBossFight) return;
+    this.isBossFight = true;
+    this.isBossSpawning = true;
+
+    // Camera flash and shake
+    this.cameras.main.flash(500, 255, 255, 255);
+    this.cameras.main.shake(200, 0.03);
+
+    // Clear all normal enemies from screen
+    for (let k = this.enemies.length - 1; k >= 0; k--) {
+      const e = this.enemies[k];
+      if (e && e.kind !== 'buff') {
+        e.graphics.destroy();
+        this.enemies.splice(k, 1);
+      }
+    }
+
+    // Red overlay background
+    if (this.bossOverlay) this.bossOverlay.destroy();
+    this.bossOverlay = this.add.graphics().setDepth(3);
+    this.bossOverlay.fillStyle(0xd32f2f, 0.3);
+    this.bossOverlay.fillRect(0, 0, this.scale.width, this.scale.height);
+
+    const { width } = this.scale;
+    const bossX = width / 2;
+    const bossY = 120;
+    const bossRadius = 80;
+    const bossMaxHp = (350 + Math.floor(this.score / 4)) * 4;
+
+    const graphics = this.add.graphics().setDepth(5);
+    graphics.setScale(0);
+
+    // Pick a color scheme different from the last one (if possible)
+    let schemeIndex = Math.floor(Math.random() * BOSS_COLOR_SCHEMES.length);
+    if (this.lastBossSchemeIndex !== undefined && BOSS_COLOR_SCHEMES.length > 1) {
+      while (schemeIndex === this.lastBossSchemeIndex) {
+        schemeIndex = Math.floor(Math.random() * BOSS_COLOR_SCHEMES.length);
+      }
+    }
+    this.lastBossSchemeIndex = schemeIndex;
+    const scheme = BOSS_COLOR_SCHEMES[schemeIndex]!;
+
+    const bossEnemy: Enemy = {
+      kind: 'boss',
+      graphics,
+      x: bossX,
+      y: bossY,
+      hp: bossMaxHp,
+      maxHp: bossMaxHp,
+      radius: bossRadius,
+      speed: 35,
+      slowTimer: 0,
+      state: 'spawning',
+      stateTimer: 0.5,
+      attackCycle: 0,
+      pulseTimer: 0,
+      essenceTimer: 3.0,
+      color: scheme.main,
+      colorSecondary: scheme.secondary,
+      dirX: 0,
+      dirY: 1,
+    };
+
+    this.boss = bossEnemy;
+    this.enemies.push(bossEnemy);
+
+    // Scale-in tween
+    this.tweens.add({
+      targets: graphics,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 500,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.isBossSpawning = false;
+        if (this.boss) {
+          this.boss.state = 'minions';
+          this.boss.stateTimer = 3.5;
+          
+          // Spawn initial minions
+          const count = 3 + Math.floor(Math.random() * 3);
+          for (let k = 0; k < count; k++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 120 + Math.random() * 40;
+            const mx = this.boss.x + Math.cos(angle) * dist;
+            const my = this.boss.y + Math.sin(angle) * dist;
+            this.spawnMinion(mx, my);
+          }
+        }
+      },
+    });
+
+    this.drawBossHpBar();
+  }
+
+  updateBoss(e: Enemy, dt: number): void {
+    if (e.state === 'spawning') return;
+
+    // Prevent player from sitting exactly at the boss's center (prevents rapid rotation flipping)
+    const pdx = this.playerX - e.x;
+    const pdy = this.playerY - e.y;
+    const plen = Math.sqrt(pdx * pdx + pdy * pdy);
+    const minCenterDist = 45; // Hard boundary radius
+    if (plen < minCenterDist && plen > 0.01) {
+      this.playerX = e.x + (pdx / plen) * minCenterDist;
+      this.playerY = e.y + (pdy / plen) * minCenterDist;
+      this.playerX = Phaser.Math.Clamp(this.playerX, PLAYER_RADIUS, this.scale.width - PLAYER_RADIUS);
+      this.playerY = Phaser.Math.Clamp(this.playerY, PLAYER_RADIUS, this.scale.height - PLAYER_RADIUS);
+    }
+
+    // Essence refilling
+    if (e.essenceTimer !== undefined) {
+      e.essenceTimer -= dt;
+      if (e.essenceTimer <= 0) {
+        e.essenceTimer = 3.0;
+        const shapes = ['yellow', 'green', 'purple'] as const;
+        for (let k = 0; k < 3; k++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 40 + Math.random() * 50;
+          const rx = e.x + Math.cos(angle) * dist;
+          const ry = e.y + Math.sin(angle) * dist;
+          const shape = shapes[Math.floor(Math.random() * shapes.length)]!;
+          this.dropToken(rx, ry, shape);
+        }
+        this.showEssenceText();
+      }
+    }
+
+    if (e.stateTimer !== undefined) {
+      e.stateTimer -= dt;
+    }
+
+    // Shockwave ring update
+    if (this.bossShockwaveRing && this.bossShockwaveRing.active) {
+      this.bossShockwaveRing.currentRadius += this.bossShockwaveRing.speed * dt;
+      if (this.bossShockwaveRing.currentRadius >= this.bossShockwaveRing.maxRadius) {
+        this.bossShockwaveRing.active = false;
+      } else if (!this.bossShockwaveRing.hasHitPlayer) {
+        const d = Phaser.Math.Distance.Between(this.bossShockwaveRing.x, this.bossShockwaveRing.y, this.playerX, this.playerY);
+        if (d < this.bossShockwaveRing.currentRadius) {
+          this.bossShockwaveRing.hasHitPlayer = true;
+          if (this.hasShield) {
+            this.hasShield = false;
+          } else {
+            this.takeDamage(10);
+          }
+          // Knockback
+          const dx = this.playerX - this.bossShockwaveRing.x;
+          const dy = this.playerY - this.bossShockwaveRing.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len > 0) {
+            this.playerX += (dx / len) * 80;
+            this.playerY += (dy / len) * 80;
+            this.playerX = Phaser.Math.Clamp(this.playerX, PLAYER_RADIUS, this.scale.width - PLAYER_RADIUS);
+            this.playerY = Phaser.Math.Clamp(this.playerY, PLAYER_RADIUS, this.scale.height - PLAYER_RADIUS);
+          }
+        }
+      }
+    }
+
+    // Boss state transitions and movement
+    if (e.state === 'cooldown') {
+      const dx = this.playerX - e.x;
+      const dy = this.playerY - e.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0) {
+        e.dirX = dx / len;
+        e.dirY = dy / len;
+        e.x += e.dirX * e.speed * dt;
+        e.y += e.dirY * e.speed * dt;
+      }
+
+      if (e.stateTimer !== undefined && e.stateTimer <= 0) {
+        e.attackCycle = ((e.attackCycle || 0) + 1) % 4;
+        this.enterBossAttackState(e);
+      }
+    } else {
+      if (e.state === 'minions') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+          e.x += e.dirX * e.speed * dt;
+          e.y += e.dirY * e.speed * dt;
+        }
+      } else if (e.state === 'spread') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+          e.x += e.dirX * e.speed * dt;
+          e.y += e.dirY * e.speed * dt;
+        }
+
+        e.projectileTimer = (e.projectileTimer || 0) - dt;
+        if (e.projectileTimer <= 0) {
+          e.projectileTimer = 0.6; // Fires twice as fast
+          const baseAngle = Phaser.Math.Angle.Between(e.x, e.y, this.playerX, this.playerY);
+          const angles = [baseAngle - 0.4, baseAngle - 0.2, baseAngle, baseAngle + 0.2, baseAngle + 0.4];
+          angles.forEach((angle) => {
+            const vx = Math.cos(angle) * 220; // Faster bullets
+            const vy = Math.sin(angle) * 220;
+            const graphics = this.add.graphics().setDepth(6);
+            const proj: Projectile = {
+              graphics,
+              x: e.x,
+              y: e.y,
+              vx,
+              vy,
+              radius: 8,
+              damage: 10,
+              isRedCircle: true,
+            };
+            this.projectiles.push(proj);
+            this.drawProjectile(proj);
+          });
+        }
+      } else if (e.state === 'charge_windup') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+        }
+        if (e.stateTimer !== undefined && e.stateTimer <= 0) {
+          e.state = 'charge';
+          e.stateTimer = 1.5;
+          const angle = Phaser.Math.Angle.Between(e.x, e.y, this.playerX, this.playerY);
+          e.chargeDirX = Math.cos(angle);
+          e.chargeDirY = Math.sin(angle);
+        }
+      } else if (e.state === 'charge') {
+        e.dirX = e.chargeDirX!;
+        e.dirY = e.chargeDirY!;
+        e.x += e.chargeDirX! * 450 * dt; // Faster charge speed
+        e.y += e.chargeDirY! * 450 * dt;
+
+        e.x = Phaser.Math.Clamp(e.x, e.radius, this.scale.width - e.radius);
+        e.y = Phaser.Math.Clamp(e.y, e.radius, this.scale.height - e.radius);
+
+        if (Math.random() < 0.8) {
+          this.fxParticles.push({
+            x: e.x + (Math.random() - 0.5) * 30,
+            y: e.y + (Math.random() - 0.5) * 30,
+            vx: -e.chargeDirX! * 40 + (Math.random() - 0.5) * 20,
+            vy: -e.chargeDirY! * 40 + (Math.random() - 0.5) * 20,
+            color: e.colorSecondary || 0x7B1FA2,
+            shape: 'green',
+            alpha: 0.85,
+            size: 3 + Math.random() * 4,
+            life: 0,
+            maxLife: 400 + Math.random() * 200,
+          });
+        }
+      } else if (e.state === 'shockwave') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+          e.x += e.dirX * e.speed * dt;
+          e.y += e.dirY * e.speed * dt;
+        }
+      }
+
+      if (e.state !== 'charge_windup' && e.stateTimer !== undefined && e.stateTimer <= 0) {
+        e.state = 'cooldown';
+        e.stateTimer = 1.5;
+        if (this.bossShockwaveRing) {
+          this.bossShockwaveRing.active = false;
+        }
+      }
+    }
+
+    e.x = Phaser.Math.Clamp(e.x, e.radius, this.scale.width - e.radius);
+    e.y = Phaser.Math.Clamp(e.y, e.radius, this.scale.height - e.radius);
+
+    this.drawBossHpBar();
+  }
+
+  enterBossAttackState(e: Enemy): void {
+    const cycle = e.attackCycle || 0;
+    if (cycle === 0) {
+      e.state = 'spread';
+      e.stateTimer = 3.5;
+      e.projectileTimer = 0;
+    } else if (cycle === 1) {
+      e.state = 'spread';
+      e.stateTimer = 3.5;
+      e.projectileTimer = 0;
+    } else if (cycle === 2) {
+      e.state = 'charge_windup';
+      e.stateTimer = 0.5;
+    } else if (cycle === 3) {
+      e.state = 'shockwave';
+      e.stateTimer = 3.5;
+      this.bossShockwaveRing = {
+        x: e.x,
+        y: e.y,
+        currentRadius: 0,
+        maxRadius: 260, // Larger shockwave radius
+        speed: 220, // Faster shockwave expansion
+        active: true,
+        hasHitPlayer: false,
+      };
+    }
+  }
+
+  spawnMinion(x: number, y: number): void {
+    const isZombie = Math.random() < 0.5;
+    const graphics = this.add.graphics().setDepth(5);
+
+    if (isZombie) {
+      const radius = ZOMBIE_RADIUS;
+      const speed = (30 + Math.random() * 10) * this.difficultySpeedMultiplier;
+      const enemy: Enemy = {
+        kind: 'zombie',
+        graphics,
+        x,
+        y,
+        radius,
+        speed,
+        hp: ENEMY_HP.zombie,
+        slowTimer: 0,
+        isMinion: true,
+      };
+      this.enemies.push(enemy);
+      this.redrawEnemy(enemy);
+    } else {
+      const radius = ATTACKER_RADIUS;
+      const speed = (40 + Math.random() * 20) * this.difficultySpeedMultiplier;
+      const enemy: Enemy = {
+        kind: 'attacker',
+        graphics,
+        x,
+        y,
+        radius,
+        speed,
+        hp: ENEMY_HP.attacker,
+        slowTimer: 0,
+        projectileTimer: 1000 + Math.random() * 2000,
+        isMinion: true,
+      };
+      this.enemies.push(enemy);
+      this.redrawEnemy(enemy);
+    }
+  }
+
+  drawBoss(e: Enemy): void {
+    const g = e.graphics;
+    g.clear();
+
+    const isHitFlashing = this.gameTime < (e.hitFlashTime || 0);
+    const pulseFactor = 1.0 + 0.1 * Math.sin(this.gameTime * 0.008);
+    
+    // Dynamically adjust scale based on how many times the boss has spawned
+    const spawnIdx = this.bossSpawnCount || 0;
+    const lengthMult = 1.0 + (spawnIdx % 4) * 0.05; // Subtle length variation
+    const widthMult = 1.0 + ((spawnIdx + 2) % 4) * 0.05; // Subtle width variation
+    const overallScaleMult = 1.0 + Math.min(spawnIdx * 0.05, 0.15); // Cap overall growth at +15%
+    
+    const r = e.radius * pulseFactor * overallScaleMult;
+
+    // Soft colored glow around the fish
+    const mainColor = e.color || 0x7B1FA2;
+    const secondaryColor = e.colorSecondary || 0xD32F2F;
+    g.fillStyle(secondaryColor, 0.15);
+    g.fillCircle(0, 0, r * 1.35 * Math.max(lengthMult, widthMult));
+
+    // 1. Sleek symmetric closed body
+    g.fillStyle(mainColor, 1);
+    g.lineStyle(2.5, 0xffffff, 1);
+    g.beginPath();
+    g.moveTo(r * lengthMult, 0); // Nose tip
+    g.lineTo(r * 0.3 * lengthMult, -r * 0.5 * widthMult); // Upper cheek
+    g.lineTo(-r * 0.5 * lengthMult, -r * 0.3 * widthMult); // Upper body bulge
+    g.lineTo(-r * 1.1 * lengthMult, 0); // Tail base center
+    g.lineTo(-r * 0.5 * lengthMult, r * 0.3 * widthMult); // Lower body bulge
+    g.lineTo(r * 0.3 * lengthMult, r * 0.5 * widthMult); // Lower cheek
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    // Intricate geometric inner markings (enhancing visual appearance)
+    g.fillStyle(secondaryColor, 0.7);
+    g.fillCircle(0, 0, r * 0.2);
+    g.fillCircle(-r * 0.35 * lengthMult, 0, r * 0.15);
+    g.fillCircle(-r * 0.7 * lengthMult, 0, r * 0.1);
+    
+    // Chevrons pointing forward
+    g.beginPath();
+    g.moveTo(r * 0.4 * lengthMult, 0);
+    g.lineTo(r * 0.1 * lengthMult, -r * 0.15 * widthMult);
+    g.lineTo(r * 0.2 * lengthMult, 0);
+    g.lineTo(r * 0.1 * lengthMult, r * 0.15 * widthMult);
+    g.closePath();
+    g.fillPath();
+
+    // 2. Large symmetric spiky side wings/fins
+    g.fillStyle(secondaryColor, 0.85);
+    g.lineStyle(1.8, 0xffffff, 1);
+    
+    // Top wing
+    g.beginPath();
+    g.moveTo(-r * 0.1 * lengthMult, -r * 0.4 * widthMult);
+    g.lineTo(-r * 0.5 * lengthMult, -r * 1.2 * widthMult); // Wing tip
+    g.lineTo(-r * 0.3 * lengthMult, -r * 0.3 * widthMult);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    // Bottom wing
+    g.beginPath();
+    g.moveTo(-r * 0.1 * lengthMult, r * 0.4 * widthMult);
+    g.lineTo(-r * 0.5 * lengthMult, r * 1.2 * widthMult); // Wing tip
+    g.lineTo(-r * 0.3 * lengthMult, r * 0.3 * widthMult);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    // 3. Crescent forked tail fin
+    g.fillStyle(secondaryColor, 0.8);
+    g.beginPath();
+    g.moveTo(-r * 1.1 * lengthMult, 0);
+    g.lineTo(-r * 1.65 * lengthMult, -r * 0.55 * widthMult); // Upper tail tip
+    g.lineTo(-r * 1.35 * lengthMult, 0); // Inner tail center
+    g.lineTo(-r * 1.65 * lengthMult, r * 0.55 * widthMult); // Lower tail tip
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+
+    // 4. Large glowing eyes facing right (symmetric on top/bottom)
+    const eyeRadius = 9 * pulseFactor * overallScaleMult;
+    if (isHitFlashing) {
+      g.fillStyle(0xffffff, 1.0);
+      g.fillCircle(r * 0.4 * lengthMult, -r * 0.2 * widthMult, eyeRadius);
+      g.fillCircle(r * 0.4 * lengthMult, r * 0.2 * widthMult, eyeRadius);
+    } else {
+      g.fillStyle(0xFF0000, 1.0);
+      g.fillCircle(r * 0.4 * lengthMult, -r * 0.2 * widthMult, eyeRadius);
+      g.fillCircle(r * 0.4 * lengthMult, r * 0.2 * widthMult, eyeRadius);
+      g.fillStyle(0xFFFF00, 1.0);
+      g.fillCircle(r * 0.45 * lengthMult, -r * 0.2 * widthMult, eyeRadius * 0.35);
+      g.fillCircle(r * 0.45 * lengthMult, r * 0.2 * widthMult, eyeRadius * 0.35);
+    }
+
+    // 5. Hit flash overlay
+    if (isHitFlashing) {
+      g.fillStyle(0xffffff, 0.9);
+      g.fillCircle(0, 0, r * Math.max(lengthMult, widthMult) * 0.8);
+    }
+
+    g.setPosition(e.x, e.y);
+  }
+
+  drawBossHpBar(): void {
+    if (!this.boss || !this.isBossFight) {
+      if (this.bossHpBarGraphics) this.bossHpBarGraphics.clear();
+      if (this.bossHpText) this.bossHpText.setVisible(false);
+      return;
+    }
+
+    const { width } = this.scale;
+    const barW = 300;
+    const barH = 20;
+    const barX = width / 2 - barW / 2;
+    const barY = 42;
+
+    if (!this.bossHpBarGraphics) {
+      this.bossHpBarGraphics = this.add.graphics().setScrollFactor(0).setDepth(11);
+    }
+    if (!this.bossHpText) {
+      this.bossHpText = this.add.text(width / 2, barY - 14, 'ABYSSAL LEVIATHAN', {
+        fontFamily: 'Arial Black',
+        fontSize: '12px',
+        color: '#FF1744',
+        stroke: '#000000',
+        strokeThickness: 3.5,
+
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
+    } else {
+      this.bossHpText.setPosition(width / 2, barY - 14).setVisible(true);
+    }
+
+    const g = this.bossHpBarGraphics;
+    g.clear();
+    g.setVisible(true);
+
+    g.fillStyle(0x4A0000, 1.0);
+    g.fillRoundedRect(barX, barY, barW, barH, 4);
+
+    const ratio = Math.max(0, Math.min(1, this.boss.hp / this.boss.maxHp!));
+    if (ratio > 0) {
+      g.fillStyle(0xFF1744, 1.0);
+      g.fillRoundedRect(barX, barY, barW * ratio, barH, 4);
+    }
+
+    g.lineStyle(1.5, 0xffffff, 0.95);
+    g.strokeRoundedRect(barX, barY, barW, barH, 4);
+  }
+
+  showEssenceText(): void {
+    if (!this.boss) return;
+    const txt = this.add.text(this.boss.x, this.boss.y - 85, 'The Leviathan drops essence!', {
+      fontFamily: 'Arial Black',
+      fontSize: '12px',
+      color: '#ffd740',
+      stroke: '#000000',
+      strokeThickness: 3,
+
+    }).setOrigin(0.5).setDepth(15);
+
+    this.tweens.add({
+      targets: txt,
+      y: this.boss.y - 125,
+      alpha: 0,
+      duration: 1200,
+      onComplete: () => txt.destroy(),
+    });
+  }
+
+  defeatBoss(e: Enemy): void {
+    if (this.bossShockwaveRing) {
+      this.bossShockwaveRing.active = false;
+      this.bossShockwaveRing = null;
+    }
+    
+    // Clear all projectiles on boss death
+    for (const p of this.projectiles) p.graphics.destroy();
+    this.projectiles = [];
+
+    this.cameras.main.flash(200, 255, 255, 255);
+
+    const colors = [0x7B1FA2, 0xD32F2F];
+    const shapes: Array<Shape | 'star'> = ['yellow', 'green', 'purple', 'star'];
+    for (let k = 0; k < 100; k++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 100 + Math.random() * 300;
+      const color = colors[Math.floor(Math.random() * colors.length)]!;
+      this.fxParticles.push({
+        x: e.x,
+        y: e.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color,
+        shape: shapes[Math.floor(Math.random() * shapes.length)]!,
+        alpha: 1.0,
+        size: 2.0 + Math.random() * 3.0,
+        life: 0,
+        maxLife: 600 + Math.random() * 600,
+      });
+    }
+
+    const bonus = 50 + Math.floor(this.score / 10);
+    this.score += bonus;
+    this.scoreText.setText(`Score: ${Math.floor(this.score)} (x${this.streakMultiplier.toFixed(1)})`);
+
+    const txt = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, `LEVIATHAN SLAIN! +${bonus} BONUS!`, {
+      fontFamily: 'Arial Black',
+      fontSize: '24px',
+      color: '#ffd740',
+      stroke: '#000000',
+      strokeThickness: 5,
+
+    }).setOrigin(0.5).setDepth(15);
+
+    this.tweens.add({
+      targets: txt,
+      y: this.scale.height / 2 - 100,
+      alpha: 0,
+      delay: 1500,
+      duration: 500,
+      onComplete: () => txt.destroy(),
+    });
+
+    // Clear minions and spawn normal tokens
+    for (let k = this.enemies.length - 1; k >= 0; k--) {
+      const other = this.enemies[k];
+      if (other && other.isMinion) {
+        const shapesList = ['yellow', 'green', 'purple'] as const;
+        const shape = shapesList[Math.floor(Math.random() * shapesList.length)]!;
+        this.dropToken(other.x, other.y, shape);
+
+        other.graphics.destroy();
+        this.enemies.splice(k, 1);
+      }
+    }
+
+    this.isBossFight = false;
+    this.boss = null;
+
+    this.bossSpawnCount++;
+    if (this.bossSpawnCount % 2 === 1) {
+      // After odd number of bosses (1st, 3rd, 5th...), next interval is 20-25 secs
+      this.bossTimer = 20 + Math.random() * 5;
+    } else {
+      // After even number of bosses (2nd, 4th, 6th...), next interval is 30-35 secs
+      this.bossTimer = 30 + Math.random() * 5;
+    }
+
+    e.graphics.destroy();
+    if (this.bossOverlay) {
+      this.bossOverlay.destroy();
+      this.bossOverlay = null;
+    }
+    if (this.bossHpBarGraphics) {
+      this.bossHpBarGraphics.destroy();
+      this.bossHpBarGraphics = null;
+    }
+    if (this.bossHpText) {
+      this.bossHpText.destroy();
+      this.bossHpText = null;
+    }
+
+    const idx = this.enemies.indexOf(e);
+    if (idx !== -1) {
+      this.enemies.splice(idx, 1);
+    }
   }
 }

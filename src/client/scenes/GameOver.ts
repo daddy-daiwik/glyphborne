@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
-import type { LeaderboardsData, LeaderboardPostResponse } from '../../shared/api';
+import type { LeaderboardsData, LeaderboardPostResponse, XpResponse } from '../../shared/api';
 
 type GameOverData = {
   score: number;
@@ -8,6 +8,8 @@ type GameOverData = {
   bestLightningChain?: number;
   bestNovaChain?: number;
   bestPoisonChain?: number;
+  xpEarned?: number;
+  bossPercentReached?: number;
 };
 
 // Helper: fixed text style factory
@@ -18,7 +20,6 @@ const txt = (fontSize: string, color: string, strokeThickness = 6) => ({
   stroke: '#000000',
   strokeThickness,
   align: 'center' as const,
-  resolution: 2,
 });
 
 export class GameOver extends Scene {
@@ -36,6 +37,25 @@ export class GameOver extends Scene {
   rowLightningText: Phaser.GameObjects.Text | null = null;
   rowNovaText: Phaser.GameObjects.Text | null = null;
   rowPoisonText: Phaser.GameObjects.Text | null = null;
+
+  // Progression & Level Up fields
+  xpEarned: number = 0;
+  totalXp: number = 0;
+  currentLevel: number = 1;
+  leveledUp: boolean = false;
+  availableUpgrades: string[] = [];
+  bossPercentReached: number | undefined = undefined;
+  bossProgressText: Phaser.GameObjects.Text | null = null;
+
+  xpProgressBg: Phaser.GameObjects.Graphics | null = null;
+  xpProgressBar: Phaser.GameObjects.Graphics | null = null;
+  levelProgressText: Phaser.GameObjects.Text | null = null;
+  xpGainText: Phaser.GameObjects.Text | null = null;
+
+  upgradeContainer: Phaser.GameObjects.Container | null = null;
+  upgradeBgGraphics: Phaser.GameObjects.Graphics | null = null;
+  upgradeTitleText: Phaser.GameObjects.Text | null = null;
+  upgradeButtons: Phaser.GameObjects.Text[] = [];
 
   // Buttons
   viewLeaderboardsButton: Phaser.GameObjects.Text | null = null;
@@ -82,6 +102,9 @@ export class GameOver extends Scene {
     this.bestLightningChain = data.bestLightningChain ?? 0;
     this.bestNovaChain = data.bestNovaChain ?? 0;
     this.bestPoisonChain = data.bestPoisonChain ?? 0;
+    this.xpEarned = data.xpEarned ?? 0;
+    this.bossPercentReached = data.bossPercentReached;
+    this.bossProgressText = null;
     this.leaderboardsData = null;
 
     this.gameover_text = null;
@@ -92,6 +115,16 @@ export class GameOver extends Scene {
     this.rowLightningText = null;
     this.rowNovaText = null;
     this.rowPoisonText = null;
+
+    this.xpProgressBg = null;
+    this.xpProgressBar = null;
+    this.levelProgressText = null;
+    this.xpGainText = null;
+    this.upgradeContainer = null;
+    this.upgradeBgGraphics = null;
+    this.upgradeTitleText = null;
+    this.upgradeButtons = [];
+
     this.viewLeaderboardsButton = null;
     this.playAgainButton = null;
     this.leaderboardContainer = null;
@@ -122,31 +155,55 @@ export class GameOver extends Scene {
       .text(0, 0, `SCORE: ${this.finalScore}`, txt('26px', '#ffffff', 6))
       .setOrigin(0.5);
 
+    // ── Boss progress text (if applicable)
+    if (this.bossPercentReached !== undefined && this.bossPercentReached !== null) {
+      this.bossProgressText = this.add
+        .text(0, 0, `You reached ${this.bossPercentReached}% of the boss's HP!`, txt('15px', '#ff1744', 4))
+        .setOrigin(0.5);
+    }
+
     // ── Stats panel header
     this.panelTitleText = this.add
       .text(0, 0, 'RUN STATISTICS', txt('18px', '#ffffff', 6))
       .setOrigin(0.5);
 
-    // ── Stats Rows
+    // ── Stats Rows (Horizontal representation)
+    const statsStr = `Total Score: ${this.finalScore}   •   Trident: ${this.bestTridentChain}   •   Lightning: ${this.bestLightningChain}   •   Nova: ${this.bestNovaChain}   •   Poison: ${this.bestPoisonChain}`;
     this.rowScoreText = this.add
-      .text(0, 0, `TOTAL SCORE: ${this.finalScore}`, txt('16px', '#ffffff', 5))
+      .text(0, 0, statsStr, txt('13px', '#ffffff', 4))
       .setOrigin(0.5);
 
-    this.rowTridentText = this.add
-      .text(0, 0, `TRIDENT CHAIN: ${this.bestTridentChain}`, txt('16px', '#ffd740', 5))
-      .setOrigin(0.5);
+    // Keep other row texts invisible/empty to avoid visual clutter
+    this.rowTridentText = this.add.text(0, 0, '', {}).setVisible(false);
+    this.rowLightningText = this.add.text(0, 0, '', {}).setVisible(false);
+    this.rowNovaText = this.add.text(0, 0, '', {}).setVisible(false);
+    this.rowPoisonText = this.add.text(0, 0, '', {}).setVisible(false);
 
-    this.rowLightningText = this.add
-      .text(0, 0, `LIGHTNING CHAIN: ${this.bestLightningChain}`, txt('16px', '#ff9100', 5))
-      .setOrigin(0.5);
+    // ── Progression / XP UI Elements
+    this.xpProgressBg = this.add.graphics();
+    this.xpProgressBar = this.add.graphics();
 
-    this.rowNovaText = this.add
-      .text(0, 0, `NOVA HITS: ${this.bestNovaChain}`, txt('16px', '#e040fb', 5))
-      .setOrigin(0.5);
+    this.levelProgressText = this.add.text(0, 0, '', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      color: '#ffd740',
+      stroke: '#000000',
+      strokeThickness: 3.5,
+      align: 'center',
 
-    this.rowPoisonText = this.add
-      .text(0, 0, `POISON CHAIN: ${this.bestPoisonChain}`, txt('16px', '#00e676', 5))
-      .setOrigin(0.5);
+    }).setOrigin(0.5);
+
+    this.xpGainText = this.add.text(0, 0, 'Loading XP Progress...', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '13px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2.5,
+      align: 'center',
+
+    }).setOrigin(0.5);
+
+    this.submitXpAndCheckLevelUp();
 
     // ── Buttons
     this.viewLeaderboardsButton = this.add
@@ -253,7 +310,7 @@ export class GameOver extends Scene {
       strokeThickness: 2.2,
       align: 'left' as const,
       lineSpacing: 5,
-      resolution: 2,
+
     };
 
     this.overlayCol1List = this.add.text(0, 0, 'Loading...', listStyle).setOrigin(0.5, 0);
@@ -426,11 +483,17 @@ export class GameOver extends Scene {
       this.scoreText.setScale(1);
     }
 
+    const hasBossProgress = this.bossPercentReached !== undefined && this.bossPercentReached !== null;
+    if (this.bossProgressText) {
+      this.bossProgressText.setPosition(midX, height * 0.185);
+      this.bossProgressText.setVisible(hasBossProgress);
+    }
+
     // Main Stats Panel
     const panelW = Math.min(Math.max(300, width * 0.95), 680);
     const panelH = Math.min(height * 0.44, 250);
     const panelX = midX - panelW / 2;
-    const panelY = height * 0.20;
+    const panelY = height * (hasBossProgress ? 0.23 : 0.20);
 
     if (this.panelGraphics) {
       this.panelGraphics.clear();
@@ -450,11 +513,18 @@ export class GameOver extends Scene {
       if (t) { t.setPosition(x, y); t.setScale(1); }
     };
 
-    setPos(this.rowScoreText, midX, panelY + 58);
-    setPos(this.rowTridentText, midX, panelY + 92);
-    setPos(this.rowLightningText, midX, panelY + 126);
-    setPos(this.rowNovaText, midX, panelY + 160);
-    setPos(this.rowPoisonText, midX, panelY + 194);
+    const isMobile = width < 600;
+    if (this.rowScoreText) {
+      this.rowScoreText.setPosition(midX, panelY + 50);
+      this.rowScoreText.setFontSize(isMobile ? '10px' : '13px');
+    }
+    if (this.rowTridentText) this.rowTridentText.setVisible(false);
+    if (this.rowLightningText) this.rowLightningText.setVisible(false);
+    if (this.rowNovaText) this.rowNovaText.setVisible(false);
+    if (this.rowPoisonText) this.rowPoisonText.setVisible(false);
+
+    // Refresh XP Progress UI positioning and drawing
+    this.updateXpProgressUI();
 
     // Buttons below panel
     const isMobilePortrait = width < height && width < 600;
@@ -485,21 +555,22 @@ export class GameOver extends Scene {
       }
     }
 
-    const isMobile = width < 600;
+
 
     // ── Leaderboard Overlay
     if (this.overlayBgGraphics) {
       this.overlayBgGraphics.clear();
-      this.overlayBgGraphics.fillStyle(0x000000, 0.92);
+      // Fullscreen semi-transparent backdrop (sky blue)
+      this.overlayBgGraphics.fillStyle(0x4fc3f7, 0.85);
       this.overlayBgGraphics.fillRect(0, 0, width, height);
 
       const lbW = Math.min(Math.max(320, width * 0.9), 700);
       const lbH = height * 0.74;
       const lbX = midX - lbW / 2;
       const lbY = height * 0.13;
-      this.overlayBgGraphics.fillStyle(0x001122, 0.96);
+      this.overlayBgGraphics.fillStyle(0x0288d1, 0.95); // Deep blue panel
       this.overlayBgGraphics.fillRoundedRect(lbX, lbY, lbW, lbH, 14);
-      this.overlayBgGraphics.lineStyle(2.5, 0xffd740, 0.95);
+      this.overlayBgGraphics.lineStyle(3, 0xffffff, 1.0); // White border
       this.overlayBgGraphics.strokeRoundedRect(lbX, lbY, lbW, lbH, 14);
     }
 
@@ -513,32 +584,32 @@ export class GameOver extends Scene {
     if (this.tabDepthBtn) {
       this.tabDepthBtn.setPosition(midX - tabGap * 2, tabY);
       this.tabDepthBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabDepthBtn.setColor(this.selectedTab === 0 ? '#ffd740' : '#ffffff');
-      this.tabDepthBtn.setStroke('#000000', this.selectedTab === 0 ? 3.5 : 2);
+      this.tabDepthBtn.setColor(this.selectedTab === 0 ? '#ffffff' : '#b3e5fc');
+      this.tabDepthBtn.setStroke(this.selectedTab === 0 ? '#0288d1' : '#000000', this.selectedTab === 0 ? 4 : 2);
     }
     if (this.tabTridentBtn) {
       this.tabTridentBtn.setPosition(midX - tabGap, tabY);
       this.tabTridentBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabTridentBtn.setColor(this.selectedTab === 1 ? '#ffd740' : '#ffffff');
-      this.tabTridentBtn.setStroke('#000000', this.selectedTab === 1 ? 3.5 : 2);
+      this.tabTridentBtn.setColor(this.selectedTab === 1 ? '#ffffff' : '#b3e5fc');
+      this.tabTridentBtn.setStroke(this.selectedTab === 1 ? '#0288d1' : '#000000', this.selectedTab === 1 ? 4 : 2);
     }
     if (this.tabLightningBtn) {
       this.tabLightningBtn.setPosition(midX, tabY);
       this.tabLightningBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabLightningBtn.setColor(this.selectedTab === 2 ? '#ffd740' : '#ffffff');
-      this.tabLightningBtn.setStroke('#000000', this.selectedTab === 2 ? 3.5 : 2);
+      this.tabLightningBtn.setColor(this.selectedTab === 2 ? '#ffffff' : '#b3e5fc');
+      this.tabLightningBtn.setStroke(this.selectedTab === 2 ? '#0288d1' : '#000000', this.selectedTab === 2 ? 4 : 2);
     }
     if (this.tabNovaBtn) {
       this.tabNovaBtn.setPosition(midX + tabGap, tabY);
       this.tabNovaBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabNovaBtn.setColor(this.selectedTab === 3 ? '#ffd740' : '#ffffff');
-      this.tabNovaBtn.setStroke('#000000', this.selectedTab === 3 ? 3.5 : 2);
+      this.tabNovaBtn.setColor(this.selectedTab === 3 ? '#ffffff' : '#b3e5fc');
+      this.tabNovaBtn.setStroke(this.selectedTab === 3 ? '#0288d1' : '#000000', this.selectedTab === 3 ? 4 : 2);
     }
     if (this.tabPoisonBtn) {
       this.tabPoisonBtn.setPosition(midX + tabGap * 2, tabY);
       this.tabPoisonBtn.setFontSize(isMobile ? '10px' : '13px');
-      this.tabPoisonBtn.setColor(this.selectedTab === 4 ? '#ffd740' : '#ffffff');
-      this.tabPoisonBtn.setStroke('#000000', this.selectedTab === 4 ? 3.5 : 2);
+      this.tabPoisonBtn.setColor(this.selectedTab === 4 ? '#ffffff' : '#b3e5fc');
+      this.tabPoisonBtn.setStroke(this.selectedTab === 4 ? '#0288d1' : '#000000', this.selectedTab === 4 ? 4 : 2);
     }
 
     // Centered columns title & list
@@ -613,5 +684,215 @@ export class GameOver extends Scene {
 
     setPos(this.overlayCloseButton, midX, height * 0.83);
     if (this.overlayCloseButton) this.overlayCloseButton.setFontSize(isMobile ? '16px' : '20px');
+
+    // Upgrade popup container layout update
+    if (this.upgradeContainer) {
+      if (this.upgradeBgGraphics) {
+        this.upgradeBgGraphics.clear();
+        this.upgradeBgGraphics.fillStyle(0x000000, 0.85);
+        this.upgradeBgGraphics.fillRect(0, 0, width, height);
+
+        const popupW = Math.min(420, width * 0.95);
+        const popupH = Math.min(360, height * 0.7);
+        const popupX = midX - popupW / 2;
+        const popupY = height / 2 - popupH / 2;
+
+        this.upgradeBgGraphics.fillStyle(0x1a0933, 0.96);
+        this.upgradeBgGraphics.fillRoundedRect(popupX, popupY, popupW, popupH, 16);
+        this.upgradeBgGraphics.lineStyle(3.5, 0xffd740, 1.0);
+        this.upgradeBgGraphics.strokeRoundedRect(popupX, popupY, popupW, popupH, 16);
+      }
+
+      if (this.upgradeTitleText) {
+        this.upgradeTitleText.setPosition(midX, height * 0.22);
+        this.upgradeTitleText.setFontSize(isMobile ? '20px' : '26px');
+      }
+
+      const buttonYStart = height / 2 - (this.availableUpgrades.length - 1) * 26;
+      this.upgradeButtons.forEach((btn, index) => {
+        btn.setPosition(midX, buttonYStart + index * 52);
+        btn.setFontSize(isMobile ? '13px' : '15px');
+      });
+    }
+  }
+
+  private submitXpAndCheckLevelUp(): void {
+    fetch('/api/player/xp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ xpToAdd: this.xpEarned }),
+    })
+      .then((res) => res.json() as Promise<XpResponse>)
+      .then((data) => {
+        this.totalXp = data.xp;
+        this.currentLevel = data.level;
+        this.leveledUp = data.leveledUp;
+        this.availableUpgrades = data.availableUpgrades;
+
+        this.updateXpProgressUI();
+
+        if (this.leveledUp && this.availableUpgrades.length > 0) {
+          this.showUpgradeChoicePopup();
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to update player XP:', err);
+      });
+  }
+
+  private updateXpProgressUI(): void {
+    const { width, height } = this.scale;
+    const midX = width / 2;
+    const panelW = Math.min(Math.max(300, width * 0.95), 680);
+    const hasBossProgress = this.bossPercentReached !== undefined && this.bossPercentReached !== null;
+    const panelY = height * (hasBossProgress ? 0.23 : 0.20);
+
+    const barW = panelW * 0.7;
+    const barH = 14;
+    const barX = midX - barW / 2;
+    const barY = panelY + 110;
+
+    const currentXpInLevel = this.totalXp % 50;
+    const progressRatio = currentXpInLevel / 50;
+
+    if (this.xpProgressBg) {
+      this.xpProgressBg.clear();
+      this.xpProgressBg.fillStyle(0x111111, 0.9);
+      this.xpProgressBg.fillRoundedRect(barX, barY, barW, barH, 6);
+      this.xpProgressBg.lineStyle(1.5, 0x4fc3f7, 0.5);
+      this.xpProgressBg.strokeRoundedRect(barX, barY, barW, barH, 6);
+    }
+
+    if (this.xpProgressBar) {
+      this.xpProgressBar.clear();
+      if (progressRatio > 0) {
+        this.xpProgressBar.fillStyle(0x00ff66, 1.0);
+        this.xpProgressBar.fillRoundedRect(barX, barY, barW * progressRatio, barH, 6);
+      }
+    }
+
+    if (this.levelProgressText) {
+      this.levelProgressText.setText(`Level ${this.currentLevel}`).setPosition(midX, panelY + 82);
+    }
+
+    if (this.xpGainText) {
+      this.xpGainText.setText(`XP: ${currentXpInLevel} / 50  (+${this.xpEarned} XP this run)`).setPosition(midX, panelY + 154);
+    }
+  }
+
+  private showUpgradeChoicePopup(): void {
+    const { width, height } = this.scale;
+    const midX = width / 2;
+    const isMobile = width < 600;
+
+    // Disable main buttons
+    if (this.playAgainButton) this.playAgainButton.setAlpha(0.2).disableInteractive();
+    if (this.viewLeaderboardsButton) this.viewLeaderboardsButton.setAlpha(0.2).disableInteractive();
+
+    this.upgradeContainer = this.add.container(0, 0).setDepth(110);
+
+    this.upgradeBgGraphics = this.add.graphics();
+    this.upgradeContainer.add(this.upgradeBgGraphics);
+
+    this.upgradeTitleText = this.add.text(midX, height * 0.22, 'LEVEL UP!\nCHOOSE AN UPGRADE', {
+      fontFamily: 'Arial Black, sans-serif',
+      fontSize: isMobile ? '20px' : '26px',
+      color: '#ffd740',
+      stroke: '#000000',
+      strokeThickness: 5,
+      align: 'center',
+
+    }).setOrigin(0.5);
+    this.upgradeContainer.add(this.upgradeTitleText);
+
+    // Draw background modal panel
+    const popupW = Math.min(420, width * 0.95);
+    const popupH = Math.min(360, height * 0.7);
+    const popupX = midX - popupW / 2;
+    const popupY = height / 2 - popupH / 2;
+
+    this.upgradeBgGraphics.fillStyle(0x000000, 0.85);
+    this.upgradeBgGraphics.fillRect(0, 0, width, height);
+
+    this.upgradeBgGraphics.fillStyle(0x1a0933, 0.96);
+    this.upgradeBgGraphics.fillRoundedRect(popupX, popupY, popupW, popupH, 16);
+    this.upgradeBgGraphics.lineStyle(3.5, 0xffd740, 1.0);
+    this.upgradeBgGraphics.strokeRoundedRect(popupX, popupY, popupW, popupH, 16);
+
+    const upgradeLabelMap: Record<string, string> = {
+      speed: 'SWIFT FIN (+5% Speed)',
+      damage: 'SHARP SPINES (+10% Spell Damage)',
+      hp: 'THICK HIDE (+10 HP)',
+      pickup: 'MAGNETIC AURA (+5% Pickup Range)',
+    };
+
+    this.upgradeButtons = [];
+    const buttonYStart = height / 2 - (this.availableUpgrades.length - 1) * 26;
+    
+    this.availableUpgrades.forEach((type, index) => {
+      const btnText = upgradeLabelMap[type] || type.toUpperCase();
+      const btnY = buttonYStart + index * 52;
+      
+      const btn = this.add.text(midX, btnY, btnText, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: isMobile ? '13px' : '15px',
+        color: '#00ff66',
+        stroke: '#000000',
+        strokeThickness: 3.5,
+        align: 'center',
+
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+      btn.on('pointerover', () => btn.setColor('#ffffff'));
+      btn.on('pointerout', () => btn.setColor('#00ff66'));
+      btn.on('pointerdown', () => {
+        // Apply upgrade choice via API
+        fetch('/api/player/upgrade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ upgradeType: type }),
+        })
+          .then((res) => res.json())
+          .then(() => {
+            // Restore main buttons
+            if (this.playAgainButton) this.playAgainButton.setAlpha(1.0).setInteractive();
+            if (this.viewLeaderboardsButton) this.viewLeaderboardsButton.setAlpha(1.0).setInteractive();
+
+            // Destroy popup
+            this.upgradeContainer?.destroy();
+            this.upgradeContainer = null;
+            this.upgradeButtons = [];
+
+            // Show toast message
+            const toast = this.add.text(midX, height * 0.74, 'UPGRADE APPLIED SUCCESSFULLY! ★', {
+              fontFamily: 'Arial Black, sans-serif',
+              fontSize: '16px',
+              color: '#ffd740',
+              stroke: '#000000',
+              strokeThickness: 4,
+      
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+              targets: toast,
+              alpha: 0,
+              delay: 1500,
+              duration: 500,
+              onComplete: () => toast.destroy(),
+            });
+          })
+          .catch((err) => {
+            console.error('Failed to apply upgrade:', err);
+            if (this.playAgainButton) this.playAgainButton.setAlpha(1.0).setInteractive();
+            if (this.viewLeaderboardsButton) this.viewLeaderboardsButton.setAlpha(1.0).setInteractive();
+            this.upgradeContainer?.destroy();
+            this.upgradeContainer = null;
+            this.upgradeButtons = [];
+          });
+      });
+
+      this.upgradeContainer?.add(btn);
+      this.upgradeButtons.push(btn);
+    });
   }
 }
