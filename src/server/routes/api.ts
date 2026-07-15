@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { context, redis, reddit } from '@devvit/web/server';
+import { context, redis, reddit, realtime } from '@devvit/web/server';
 import type {
   DecrementResponse,
   IncrementResponse,
@@ -100,6 +100,51 @@ api.post('/decrement', async (c) => {
     postId,
     type: 'decrement',
   });
+});
+
+api.post('/leviathan/damage', async (c) => {
+  const { postId } = context;
+  if (!postId) return c.json<ErrorResponse>({ status: 'error', message: 'postId is required' }, 400);
+
+  const payload = await c.req.json<{ damage: number }>();
+  
+  // Weekly expiration logic
+  const redisKey = 'weekly_leviathan_hp';
+  let hp = await redis.get(redisKey);
+  
+  // If not exists, initialize to 1,000,000 HP with 7-day expiry
+  if (!hp) {
+    const defaultHp = 1000000;
+    await redis.set(redisKey, defaultHp.toString(), { expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+    hp = defaultHp.toString();
+  }
+  
+  // Decrement HP
+  const newHp = await redis.incrBy(redisKey, -payload.damage);
+  
+  // Broadcast updated HP to all clients via Realtime API
+  await realtime.send(postId, {
+    type: 'leviathan_hp',
+    hp: newHp
+  });
+
+  return c.json({ status: 'success', hp: newHp });
+});
+
+api.get('/leviathan/hp', async (c) => {
+  try {
+    const redisKey = 'weekly_leviathan_hp';
+    let hp = await redis.get(redisKey);
+    if (!hp) {
+      const defaultHp = 1000000;
+      await redis.set(redisKey, defaultHp.toString(), { expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+      hp = defaultHp.toString();
+    }
+    return c.json({ status: 'success', hp: parseInt(hp) });
+  } catch (error) {
+    console.error('API get leviathan hp error:', error);
+    return c.json<ErrorResponse>({ status: 'error', message: 'Failed to retrieve boss hp' }, 500);
+  }
 });
 
 api.get('/highscore', async (c) => {

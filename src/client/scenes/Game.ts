@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import * as Phaser from 'phaser';
+import { context, connectRealtime } from '@devvit/web/client';
 
 type Shape = 'yellow' | 'green' | 'purple';
 
@@ -378,6 +379,7 @@ export class Game extends Scene {
   bossTimer: number = 40;
   bossSpawnCount: number = 0;
   lastBossSchemeIndex: number | undefined = undefined;
+  isRaidMode: boolean = false;
 
   // Depth meter
   depthMeterGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -397,7 +399,7 @@ export class Game extends Scene {
     super('Game');
   }
 
-  init(): void {
+  init(data?: any): void {
     this.playerGraphics = null;
     this.playerX = 512;
     this.playerY = 384;
@@ -447,6 +449,7 @@ export class Game extends Scene {
     this.spellTouchZones = [];
     this.joystickActive = false;
     this.joystickPointerID = -1;
+    this.isRaidMode = data?.mode === 'raid';
     this.joystickBaseX = 0;
     this.joystickBaseY = 0;
     this.joystickThumbX = 0;
@@ -457,6 +460,12 @@ export class Game extends Scene {
     this.playerDead = false;
     this.bossPhaseTriggered = new Set();
     this.bossTimerMax = 40;
+    
+    // In Raid mode, spawn the Leviathan immediately
+    if (this.isRaidMode) {
+      this.bossTimer = 2;
+    }
+    
     this.killComboCount = 0;
     this.lastComboCount = 0;
     this.heatMode = false;
@@ -491,7 +500,7 @@ export class Game extends Scene {
     this.bossHpBarGraphics = null;
     this.bossHpText = null;
     this.bossShockwaveRing = null;
-    this.bossTimer = 40;
+    this.bossTimer = this.isRaidMode ? 2 : 40;
     this.bossSpawnCount = 0;
     this.lastBossSchemeIndex = undefined;
   }
@@ -601,6 +610,28 @@ export class Game extends Scene {
       })
       .setScrollFactor(0)
       .setDepth(10);
+      
+    // ── Raid Mode Instructions
+    if (this.isRaidMode) {
+      const raidInstr = this.add.text(this.scale.width / 2, 85, 'To support someone: Comment !DropMana @username or !HealPlayer @username', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        color: '#ffff00',
+        stroke: '#000000',
+        strokeThickness: 3,
+        align: 'center',
+        wordWrap: { width: 320, useAdvancedWrap: true }
+      }).setScrollFactor(0).setDepth(20).setOrigin(0.5);
+
+      this.time.delayedCall(10000, () => {
+        this.tweens.add({
+          targets: raidInstr,
+          alpha: 0,
+          duration: 1000,
+          onComplete: () => raidInstr.destroy()
+        });
+      });
+    }
 
     // ── Speed booster text
     this.boosterText = this.add
@@ -803,6 +834,102 @@ export class Game extends Scene {
 
     this.redrawInventoryHud();
     this.drawHpBar();
+
+    if (context && context.postId) {
+      connectRealtime({
+        channel: context.postId,
+        onMessage: (msg: any) => {
+          if (msg.type === 'comment_drop') {
+            if (msg.targetPlayer) {
+              const progress = this.registry.get('playerProgress');
+              const myUsername = progress?.username?.toLowerCase();
+              if (!myUsername || msg.targetPlayer.toLowerCase() !== myUsername) {
+                return; // Targeted at someone else
+              }
+            }
+            this.handleCommentDrop(msg.dropType, msg.author, msg.count || 1, !!msg.targetPlayer);
+          } else if (msg.type === 'leviathan_hp') {
+            this.updateGlobalLeviathanHp(msg.hp);
+          }
+        }
+      });
+    }
+  }
+
+  handleCommentDrop(dropType: string, author: string, count: number = 1, isTargeted: boolean = false): void {
+    if (isTargeted) {
+      if (dropType === 'mana') {
+        const shapes: Shape[] = ['purple', 'yellow', 'green'];
+        for (let i = 0; i < count; i++) {
+          const randomShape = shapes[Math.floor(Math.random() * shapes.length)]!;
+          this.inventory[randomShape] += 1;
+        }
+        this.redrawInventoryHud();
+        this.playSound('token');
+        this.showFloatingText(this.playerX, this.playerY - 40, `${author} sent you ${count} Mana!`, 0x9c27b0);
+      } else if (dropType === 'heal') {
+        this.hp = Math.min(this.maxHp, this.hp + BUFF_HEAL * count);
+        this.drawHpBar();
+        this.playSound('heal');
+        const textMsg = count > 1 ? `${author} sent you ${count} Heals!` : `${author} sent you a Heal!`;
+        this.showFloatingText(this.playerX, this.playerY - 40, textMsg, 0x00ff00);
+      }
+      return;
+    }
+
+    let baseX = 100 + Math.random() * (this.scale.width - 200);
+    let baseY = 100 + Math.random() * (this.scale.height - 200);
+    const shapes: Shape[] = ['purple', 'yellow', 'green'];
+
+    for (let i = 0; i < count; i++) {
+      // Add more offset for multiple drops so they spread out wider
+      const spread = count > 1 ? Math.min(300, count * 20) : 0;
+      const rx = baseX + (Math.random() - 0.5) * spread;
+      const ry = baseY + (Math.random() - 0.5) * spread;
+      
+      if (dropType === 'mana') {
+        const randomShape = shapes[Math.floor(Math.random() * shapes.length)]!;
+        this.dropToken(rx, ry, randomShape);
+      } else if (dropType === 'heal') {
+        this.buildBuffEnemyAt(rx, ry);
+      }
+    }
+    
+    // Show one text label for the whole batch
+    const textMsg = count > 1 ? `${author} dropped ${count} ${dropType === 'mana' ? 'Mana' : 'Heals'}!` : `${author} dropped ${dropType === 'mana' ? 'Mana!' : 'a Heal!'}`;
+    this.showFloatingText(baseX, baseY, textMsg, dropType === 'mana' ? 0x9c27b0 : 0x00ff00);
+  }
+
+  buildBuffEnemyAt(x: number, y: number): void {
+    const graphics = this.add.graphics();
+    this.enemies.push({
+      kind: 'buff', graphics, x, y, radius: BUFF_RADIUS, speed: 50,
+      hp: ENEMY_HP.buff, slowTimer: 0,
+      dirX: 0, dirY: 0, nextDirTimer: 1500, buffKind: 'heal'
+    });
+  }
+
+  updateGlobalLeviathanHp(hp: number): void {
+    if (this.boss && this.boss.bossType === 'leviathan') {
+      this.boss.hp = Math.max(0, hp);
+    }
+  }
+
+  showFloatingText(x: number, y: number, text: string, color: number): void {
+    const txt = this.add.text(x, y, text, {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      color: '#' + color.toString(16).padStart(6, '0'),
+      stroke: '#000',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(20);
+    this.tweens.add({
+      targets: txt,
+      y: y - 50,
+      alpha: 0,
+      duration: 2000,
+      onComplete: () => txt.destroy(),
+    });
   }
 
   override update(time: number, delta: number) {
@@ -1520,6 +1647,15 @@ export class Game extends Scene {
     e.hitFlashTime = this.gameTime + 100;
     this.redrawEnemy(e);
 
+    // Send damage to global backend if Leviathan
+    if (e.kind === 'boss' && e.bossType === 'leviathan') {
+      fetch('/api/leviathan/damage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ damage: Math.round(scaledAmount) })
+      }).catch(err => console.error('Failed to report Leviathan damage:', err));
+    }
+
     // Polish: floating damage number on enemy hit
     if (e.kind !== 'boss' || scaledAmount >= 20) {
       const dmgTxt = this.add
@@ -1547,8 +1683,8 @@ export class Game extends Scene {
         return;
       }
       const dropMap: Record<Exclude<EnemyKind, 'boss'>, Shape> = {
-        current: e.shape || 'yellow',
-        zombie: 'purple',
+        current: 'purple',
+        zombie: 'yellow',
         attacker: 'green',
         buff: 'purple',
       };
@@ -1802,8 +1938,7 @@ export class Game extends Scene {
   }
 
   buildCurrentEnemy(): void {
-    const shapes = ['yellow', 'green', 'purple'] as const;
-    const shape = shapes[Math.floor(Math.random() * shapes.length)]!;
+    const shape = 'purple';
     const radius = 9 + Math.random() * 10;
     const speed = (60 + Math.random() * 80) * this.difficultySpeedMultiplier;
 
@@ -2716,7 +2851,10 @@ export class Game extends Scene {
           for (let p = 0; p < 8; p++) {
             const spread = (Math.random() * 2 - 1) * POISON_CONE_HALF_ANGLE;
             const pAngle = coneAngle + spread;
-            const speed = (120 + Math.random() * 80 + wave * 30) * 2.5; // faster to match new range
+            const speed = 400 + Math.random() * 200 + wave * 40; 
+            const distToEdge = Math.max(this.scale.width, this.scale.height);
+            const requiredLife = (distToEdge / speed) * 1000;
+            
             this.fxParticles.push({
               x: this.playerX,
               y: this.playerY,
@@ -2727,7 +2865,7 @@ export class Game extends Scene {
               alpha: 0.85,
               size: 3 + Math.random() * 5,
               life: wave * 60,
-              maxLife: 600 + wave * 80,
+              maxLife: requiredLife + wave * 40,
             });
             // Bubble particles
             this.fxParticles.push({
@@ -2740,7 +2878,7 @@ export class Game extends Scene {
               alpha: 0.6,
               size: 2 + Math.random() * 3,
               life: wave * 60,
-              maxLife: 400 + wave * 60,
+              maxLife: (requiredLife * 1.2) + wave * 40,
             });
           }
         }
@@ -2765,9 +2903,7 @@ export class Game extends Scene {
 
           if (Math.abs(angleDiff) > POISON_CONE_HALF_ANGLE) continue;
 
-          const damage = dist <= 100
-            ? POISON_DAMAGE_CLOSE
-            : POISON_DAMAGE_CLOSE * (1 - (dist - 100) / (POISON_RANGE - 100));
+          const damage = POISON_DAMAGE_CLOSE;
 
           const idx = this.enemies.indexOf(e);
           if (idx !== -1) {
@@ -3414,7 +3550,7 @@ export class Game extends Scene {
     this.playSound('boss_spawn');
 
     const bossTypes: Array<'leviathan' | 'octopus' | 'squid' | 'lobster'> = ['leviathan', 'octopus', 'squid', 'lobster'];
-    const bType = bossTypes[Math.floor(Math.random() * bossTypes.length)]!;
+    const bType = this.isRaidMode ? 'leviathan' : bossTypes[Math.floor(Math.random() * bossTypes.length)]!;
     const bossName = bType.toUpperCase();
 
     // Polish: dramatic "[BOSS] AWAKENS" announcement
@@ -3468,7 +3604,18 @@ export class Game extends Scene {
     const bossX = width / 2;
     const bossY = 120;
     const bossRadius = 80;
-    const bossMaxHp = (350 + Math.floor(this.score / 4)) * 4;
+    let bossMaxHp = (350 + Math.floor(this.score / 4)) * 4;
+    if (this.isRaidMode && bType === 'leviathan') {
+      bossMaxHp = 1000000;
+      fetch('/api/leviathan/hp')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.hp !== undefined) {
+            this.updateGlobalLeviathanHp(data.hp);
+          }
+        })
+        .catch(err => console.error('Failed to fetch leviathan HP', err));
+    }
 
     const graphics = this.add.graphics().setDepth(5);
     graphics.setScale(0);

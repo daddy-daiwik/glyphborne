@@ -51,6 +51,7 @@ export class MainMenu extends Scene {
   titleText: Phaser.GameObjects.Text | null = null;
   subtitleText: Phaser.GameObjects.Text | null = null;
   playButton: Phaser.GameObjects.Text | null = null;
+  raidButton: Phaser.GameObjects.Text | null = null;
   upgradesRoadmapButton: Phaser.GameObjects.Text | null = null;
   howToPlayButton: Phaser.GameObjects.Text | null = null;
   leaderboardButton: Phaser.GameObjects.Text | null = null;
@@ -110,6 +111,7 @@ export class MainMenu extends Scene {
     this.titleText = null;
     this.subtitleText = null;
     this.playButton = null;
+    this.raidButton = null;
     this.leaderboardButton = null;
 
     this.playerProgress = null;
@@ -198,7 +200,17 @@ export class MainMenu extends Scene {
 
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(1);
 
-    this.upgradesRoadmapButton = this.add.text(0, 0, 'ROADMAP & UPGRADES', {
+    // Multi-player Boss
+    this.raidButton = this.add.text(0, 0, 'MULTI-PLAYER BOSS', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      color: '#ff4444',
+      stroke: '#000000',
+      strokeThickness: 4,
+      align: 'center',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(1);
+
+    this.upgradesRoadmapButton = this.add.text(0, 0, 'UPGRADES', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       color: '#ffffff',
@@ -244,10 +256,26 @@ export class MainMenu extends Scene {
       } else {
         this.registry.set('activeWelcomeBonus', null);
       }
-      this.scene.start('Game');
+      this.scene.start('Game', { mode: 'normal' });
     });
 
-    this.upgradesRoadmapButton.on('pointerover', () => this.upgradesRoadmapButton?.setColor('#4fc3f7'));
+    this.raidButton.on('pointerover', () => this.raidButton?.setColor('#ffffff'));
+    this.raidButton.on('pointerout', () => this.raidButton?.setColor('#ff4444'));
+    this.raidButton.on('pointerdown', () => {
+      if (this.playerProgress && this.playerProgress.welcomeBonus && this.playerProgress.welcomeBonus.claimed && this.playerProgress.welcomeBonus.value > 0) {
+        this.registry.set('activeWelcomeBonus', this.playerProgress.welcomeBonus);
+        fetch('/api/player/welcome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'consume' }),
+        }).catch((err) => console.error('Error consuming welcome bonus:', err));
+      } else {
+        this.registry.set('activeWelcomeBonus', null);
+      }
+      this.scene.start('Game', { mode: 'raid' });
+    });
+
+    this.upgradesRoadmapButton.on('pointerover', () => this.upgradesRoadmapButton?.setColor('#ffcc00'));
     this.upgradesRoadmapButton.on('pointerout', () => this.upgradesRoadmapButton?.setColor('#ffffff'));
     this.upgradesRoadmapButton.on('pointerdown', () => {
       this.showUpgradesRoadmapOverlay();
@@ -814,22 +842,27 @@ export class MainMenu extends Scene {
 
     // Buttons
     if (this.playButton) {
-      this.playButton.setPosition(midX, Math.round(height * 0.53));
+      this.playButton.setPosition(midX, Math.round(height * 0.51));
       this.playButton.setScale(1);
     }
 
+    if (this.raidButton) {
+      this.raidButton.setPosition(midX, Math.round(height * 0.59));
+      this.raidButton.setScale(1);
+    }
+
     if (this.upgradesRoadmapButton) {
-      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.62));
+      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.67));
       this.upgradesRoadmapButton.setScale(1);
     }
 
     if (this.howToPlayButton) {
-      this.howToPlayButton.setPosition(midX, Math.round(height * 0.71));
+      this.howToPlayButton.setPosition(midX, Math.round(height * 0.75));
       this.howToPlayButton.setScale(1);
     }
 
     if (this.leaderboardButton) {
-      this.leaderboardButton.setPosition(midX, Math.round(height * 0.80));
+      this.leaderboardButton.setPosition(midX, Math.round(height * 0.83));
       this.leaderboardButton.setScale(1);
     }
 
@@ -1402,7 +1435,7 @@ export class MainMenu extends Scene {
 1. ${isMobile ? 'Drag the Joystick on the left to swim or move.' : 'Use WASD keys to swim or move.'}
 2. Tap the spell panel (or press 1-4) to cast spells.
 3. Collect spell orbs dropped by enemies:
-   - YELLOW ▲ | GREEN ● | PURPLE ■
+   - YELLOW | GREEN | PURPLE
 4. Cast devastating spells with the right orb recipes:
    - Spear (2 Purple, 1 Yellow)
    - Burst (2 Yellow, 1 Purple)
