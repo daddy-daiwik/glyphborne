@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { OnAppInstallRequest, TriggerResponse } from '@devvit/web/shared';
-import { context, realtime } from '@devvit/web/server';
+import { context, realtime, redis } from '@devvit/web/server';
 import { createPost } from '../core/post';
 
 export const triggers = new Hono();
@@ -60,11 +60,21 @@ triggers.post('/on-comment-submit', async (c) => {
         if (count > 30) count = 30; // Cap at 30 to prevent performance issues
       }
 
+      const author = event.author?.name || 'A_viewer';
+
+      // Rate limit: one drop per author per 10 seconds
+      const rateLimitKey = `comment_drop_rl:${author}`;
+      const alreadySent = await redis.get(rateLimitKey);
+      if (alreadySent) {
+        return c.json<TriggerResponse>({ status: 'success', message: 'Rate limited' }, 200);
+      }
+      await redis.set(rateLimitKey, '1', { expiration: new Date(Date.now() + 10_000) });
+
       // Broadcast the event to all active game clients watching this post
       await realtime.send(event.post.id, {
         type: 'comment_drop',
         dropType: dropType,
-        author: event.author?.name || 'A viewer',
+        author: author,
         targetPlayer: targetPlayer,
         count: count
       });

@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import { context, redis, reddit, realtime } from '@devvit/web/server';
 import type {
-  DecrementResponse,
-  IncrementResponse,
   InitResponse,
   LeaderboardEntry,
   LeaderboardGetResponse,
@@ -62,71 +60,50 @@ api.get('/init', async (c) => {
   }
 });
 
-api.post('/increment', async (c) => {
-  const { postId } = context;
-  if (!postId) {
-    return c.json<ErrorResponse>(
-      {
-        status: 'error',
-        message: 'postId is required',
-      },
-      400
-    );
-  }
 
-  const count = await redis.incrBy('count', 1);
-  return c.json<IncrementResponse>({
-    count,
-    postId,
-    type: 'increment',
-  });
-});
-
-api.post('/decrement', async (c) => {
-  const { postId } = context;
-  if (!postId) {
-    return c.json<ErrorResponse>(
-      {
-        status: 'error',
-        message: 'postId is required',
-      },
-      400
-    );
-  }
-
-  const count = await redis.incrBy('count', -1);
-  return c.json<DecrementResponse>({
-    count,
-    postId,
-    type: 'decrement',
-  });
-});
 
 api.post('/leviathan/damage', async (c) => {
   const { postId } = context;
   if (!postId) return c.json<ErrorResponse>({ status: 'error', message: 'postId is required' }, 400);
 
   const payload = await c.req.json<{ damage: number }>();
-  
+
+  // Validate damage: must be a positive finite number, capped at 10000 per hit
+  const dmg = Number(payload.damage);
+  if (!isFinite(dmg) || dmg <= 0 || dmg > 10000) {
+    return c.json<ErrorResponse>({ status: 'error', message: 'Invalid damage value' }, 400);
+  }
+
   // Weekly expiration logic
   const redisKey = 'weekly_leviathan_hp';
   let hp = await redis.get(redisKey);
-  
+
   // If not exists, initialize to 1,000,000 HP with 7-day expiry
   if (!hp) {
     const defaultHp = 1000000;
     await redis.set(redisKey, defaultHp.toString(), { expiration: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
     hp = defaultHp.toString();
   }
-  
-  // Decrement HP
-  const newHp = await redis.incrBy(redisKey, -payload.damage);
-  
+
+  // Decrement HP, floor at 0
+  const rawHp = await redis.incrBy(redisKey, -dmg);
+  const newHp = Math.max(0, rawHp);
+  if (rawHp < 0) {
+    await redis.set(redisKey, '0');
+  }
+
   // Broadcast updated HP to all clients via Realtime API
   await realtime.send(postId, {
     type: 'leviathan_hp',
     hp: newHp
   });
+
+  // If boss just died, broadcast a dedicated kill event so all clients can react
+  if (newHp === 0) {
+    await realtime.send(postId, {
+      type: 'leviathan_killed',
+    });
+  }
 
   return c.json({ status: 'success', hp: newHp });
 });

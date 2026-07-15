@@ -380,6 +380,7 @@ export class Game extends Scene {
   bossSpawnCount: number = 0;
   lastBossSchemeIndex: number | undefined = undefined;
   isRaidMode: boolean = false;
+  realtimeConnected: boolean = false;
 
   // Depth meter
   depthMeterGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -835,7 +836,8 @@ export class Game extends Scene {
     this.redrawInventoryHud();
     this.drawHpBar();
 
-    if (context && context.postId) {
+    if (context && context.postId && !this.realtimeConnected) {
+      this.realtimeConnected = true;
       connectRealtime({
         channel: context.postId,
         onMessage: (msg: any) => {
@@ -850,6 +852,17 @@ export class Game extends Scene {
             this.handleCommentDrop(msg.dropType, msg.author, msg.count || 1, !!msg.targetPlayer);
           } else if (msg.type === 'leviathan_hp') {
             this.updateGlobalLeviathanHp(msg.hp);
+          } else if (msg.type === 'leviathan_killed') {
+            // Another player landed the killing blow — force boss death locally
+            if (this.boss && this.boss.bossType === 'leviathan' && this.isBossFight) {
+              this.boss.hp = 0;
+              this.showFloatingText(
+                this.scale.width / 2,
+                this.scale.height / 2 - 60,
+                '⚡ LEVIATHAN SLAIN BY THE COMMUNITY! ⚡',
+                0xffd700
+              );
+            }
           }
         }
       });
@@ -1697,9 +1710,6 @@ export class Game extends Scene {
     this.hasShield = false;
     e.graphics.destroy();
     this.enemies.splice(i, 1);
-
-    for (const p of this.projectiles) p.graphics.destroy();
-    this.projectiles = [];
 
     this.cameras.main.shake(50, 0.02);
     this.playSound('kill');
@@ -4320,17 +4330,18 @@ export class Game extends Scene {
     if (this.boss) {
       const bType = this.boss.bossType || 'leviathan';
       const bossName = bType === 'leviathan' ? 'ABYSSAL LEVIATHAN' : `ABYSSAL ${bType.toUpperCase()}`;
-      this.bossHpText = this.add.text(width / 2, barY - 14, bossName, {
-        fontFamily: 'Arial Black',
-        fontSize: '12px',
-        color: '#FF1744',
-        stroke: '#000000',
-        strokeThickness: 3.5,
-      }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
-    } else {
-      if (this.bossHpText) {
-      this.bossHpText.setPosition(width / 2, barY - 14).setVisible(true);
-    }
+      if (!this.bossHpText) {
+        // Create only once, reuse every frame
+        this.bossHpText = this.add.text(width / 2, barY - 14, bossName, {
+          fontFamily: 'Arial Black',
+          fontSize: '12px',
+          color: '#FF1744',
+          stroke: '#000000',
+          strokeThickness: 3.5,
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
+      } else {
+        this.bossHpText.setText(bossName).setPosition(width / 2, barY - 14).setVisible(true);
+      }
     }
 
     const g = this.bossHpBarGraphics;
