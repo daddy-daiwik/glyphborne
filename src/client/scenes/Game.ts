@@ -141,16 +141,16 @@ const TOKEN_BOB_SPEED = 0.003;
 const PLAYER_SPEED = 300;
 const SPAWN_INTERVAL = 900;
 const START_DELAY = 1500;
-const SCORE_PER_SECOND = 10;
+const SCORE_PER_SECOND = 5;
 const PICKUP_RADIUS = PLAYER_RADIUS + TOKEN_RADIUS + 32;
 const PROJECTILE_RADIUS = 4;
 const PROJECTILE_SPEED = 200;
 const MAX_HP = 100;
-const ZOMBIE_DAMAGE = 14;
+const ZOMBIE_DAMAGE = 10;
 const ZOMBIE_RADIUS = 12;
 const ATTACKER_RADIUS = 14;
 const ATTACKER_DAMAGE_MIN = 17;
-const ATTACKER_DAMAGE_MAX = 24;
+const ATTACKER_DAMAGE_MAX = 17;
 
 const ATTACKER_PROJECTILE_INTERVAL_MIN = 1200;
 const ATTACKER_PROJECTILE_INTERVAL_MAX = 2000;
@@ -160,8 +160,8 @@ const BUFF_SPEED_DURATION = 5000;
 const BUFF_SPEED_MULTIPLIER = 1.5;
 const BUFF_REPEL_DISTANCE = 80;
 const CURRENT_SPAWN_WEIGHT = 40;
-const ZOMBIE_SPAWN_WEIGHT = 25;
-const ATTACKER_SPAWN_WEIGHT = 25;
+const ZOMBIE_SPAWN_WEIGHT = 22;
+const ATTACKER_SPAWN_WEIGHT = 22;
 
 const ENEMY_COLORS = [
   0xff1744, // Bright Red
@@ -1548,7 +1548,7 @@ export class Game extends Scene {
       }
       const dropMap: Record<Exclude<EnemyKind, 'boss'>, Shape> = {
         current: e.shape || 'yellow',
-        zombie: 'yellow',
+        zombie: 'purple',
         attacker: 'green',
         buff: 'purple',
       };
