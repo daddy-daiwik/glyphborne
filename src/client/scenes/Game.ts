@@ -147,10 +147,11 @@ const PROJECTILE_RADIUS = 4;
 const PROJECTILE_SPEED = 200;
 const MAX_HP = 100;
 const ZOMBIE_DAMAGE = 20;
-const ZOMBIE_RADIUS = 15;
-const ATTACKER_RADIUS = 13;
-const ATTACKER_DAMAGE_MIN = 1;
-const ATTACKER_DAMAGE_MAX = 3;
+const ZOMBIE_RADIUS = 12;
+const ATTACKER_RADIUS = 14;
+const ATTACKER_DAMAGE_MIN = 25;
+const ATTACKER_DAMAGE_MAX = 35;
+
 const ATTACKER_PROJECTILE_INTERVAL_MIN = 1200;
 const ATTACKER_PROJECTILE_INTERVAL_MAX = 2000;
 const BUFF_RADIUS = 11;
@@ -197,15 +198,15 @@ const COMBOS: ComboDefinition[] = [
     id: 'trident',
     name: 'Tidal Spear',
     shortName: 'SPEAR',
-    requires: { yellow: 3, green: 0, purple: 0 },
-    icons: ['yellow', 'yellow', 'yellow'],
+    requires: { yellow: 1, green: 0, purple: 2 },
+    icons: ['purple', 'purple', 'yellow'],
   },
   {
     id: 'nova',
     name: 'Abyssal Burst',
     shortName: 'BURST',
-    requires: { yellow: 0, green: 3, purple: 0 },
-    icons: ['green', 'green', 'green'],
+    requires: { yellow: 2, green: 0, purple: 1 },
+    icons: ['yellow', 'yellow', 'purple'],
   },
   {
     id: 'lightning',
@@ -231,8 +232,8 @@ const NOVA_RADIUS = 160;
 const NOVA_DAMAGE = 300;
 const NOVA_DURATION = 450;
 const LIGHTNING_DAMAGE = 40;
-const POISON_RANGE = 200;
-const POISON_CONE_HALF_ANGLE = Math.PI / 6; // 30 deg = 60 deg total opening
+const POISON_RANGE = 1000;
+const POISON_CONE_HALF_ANGLE = Math.PI / 4.5; // 40 deg = 80 deg total opening
 const POISON_DAMAGE_CLOSE = 100;
 // POISON_DAMAGE_FAR removed — damage falloff computed inline via distRatio
 
@@ -2715,7 +2716,7 @@ export class Game extends Scene {
           for (let p = 0; p < 8; p++) {
             const spread = (Math.random() * 2 - 1) * POISON_CONE_HALF_ANGLE;
             const pAngle = coneAngle + spread;
-            const speed = 120 + Math.random() * 80 + wave * 30;
+            const speed = (120 + Math.random() * 80 + wave * 30) * 2.5; // faster to match new range
             this.fxParticles.push({
               x: this.playerX,
               y: this.playerY,
@@ -3854,19 +3855,55 @@ export class Game extends Scene {
     g.lineStyle(2.5, 0xffffff, 1);
 
     if (e.bossType === 'octopus') {
-      // Octopus: Round head and 8 tentacles
+      // Octopus: Bulbous head and 8 mathematically curvy undulating tentacles
+      // Slightly smaller overall scale for octopus
+      const octoScale = 0.85;
+      
       for (let i = 0; i < 8; i++) {
-        const angle = (Math.PI * 2 / 8) * i + (this.gameTime * 0.002);
+        const baseAngle = (Math.PI * 2 / 8) * i;
         g.beginPath();
-        g.moveTo(0, 0);
-        g.lineTo(Math.cos(angle - 0.2) * r * 1.5, Math.sin(angle - 0.2) * r * 1.5);
-        g.lineTo(Math.cos(angle + 0.2) * r * 1.5, Math.sin(angle + 0.2) * r * 1.5);
+        // Start near the head
+        const startX = Math.cos(baseAngle) * r * 0.7 * octoScale;
+        const startY = Math.sin(baseAngle) * r * 0.7 * octoScale;
+        g.moveTo(startX, startY);
+        
+        // Draw wavy tentacle
+        const segments = 12;
+        const tentacleLength = r * 2.2 * lengthMult * octoScale;
+        let lastX = startX;
+        let lastY = startY;
+        for (let j = 1; j <= segments; j++) {
+           const t = j / segments;
+           // Undulation
+           const wave = Math.sin(t * Math.PI * 3 + this.gameTime * 0.005 + i) * r * 0.3 * octoScale;
+           const currentAngle = baseAngle + wave / tentacleLength;
+           const dist = t * tentacleLength;
+           lastX = startX + Math.cos(currentAngle) * dist;
+           lastY = startY + Math.sin(currentAngle) * dist;
+           g.lineTo(lastX, lastY);
+        }
+        // Taper back
+        for (let j = segments - 1; j >= 0; j--) {
+           const t = j / segments;
+           const wave = Math.sin(t * Math.PI * 3 + this.gameTime * 0.005 + i) * r * 0.3 * octoScale;
+           const currentAngle = baseAngle + wave / tentacleLength;
+           const dist = t * tentacleLength;
+           const thickness = (1 - t) * r * 0.25 * octoScale;
+           const perpX = Math.cos(currentAngle + Math.PI/2) * thickness;
+           const perpY = Math.sin(currentAngle + Math.PI/2) * thickness;
+           g.lineTo(startX + Math.cos(currentAngle) * dist + perpX, startY + Math.sin(currentAngle) * dist + perpY);
+        }
         g.closePath();
         g.fillPath();
         g.strokePath();
       }
-      g.fillCircle(0, 0, r * 0.8 * lengthMult);
-      g.strokeCircle(0, 0, r * 0.8 * lengthMult);
+      
+      // Mantle / Head
+      // Simulating an ellipse with overlapping circles to be completely safe across Phaser versions
+      g.fillCircle(-r * 0.4 * octoScale, 0, r * 0.8 * Math.max(lengthMult, widthMult) * octoScale);
+      g.strokeCircle(-r * 0.4 * octoScale, 0, r * 0.8 * Math.max(lengthMult, widthMult) * octoScale);
+      g.fillCircle(-r * 0.1 * octoScale, 0, r * 0.7 * Math.max(lengthMult, widthMult) * octoScale);
+      g.strokeCircle(-r * 0.1 * octoScale, 0, r * 0.7 * Math.max(lengthMult, widthMult) * octoScale);
     } else if (e.bossType === 'squid') {
       // Squid: Triangular body, trailing tentacles
       g.beginPath();
@@ -3888,15 +3925,63 @@ export class Game extends Scene {
         g.strokePath();
       }
     } else if (e.bossType === 'lobster') {
-      // Lobster: Segmented body and big claws
-      g.fillRect(-r * 0.8 * lengthMult, -r * 0.4 * widthMult, r * 1.6 * lengthMult, r * 0.8 * widthMult);
-      g.strokeRect(-r * 0.8 * lengthMult, -r * 0.4 * widthMult, r * 1.6 * lengthMult, r * 0.8 * widthMult);
-      // Claws
-      g.fillStyle(secondaryColor, 1);
-      g.fillCircle(r * 0.8 * lengthMult, -r * 0.6 * widthMult, r * 0.5);
-      g.strokeCircle(r * 0.8 * lengthMult, -r * 0.6 * widthMult, r * 0.5);
-      g.fillCircle(r * 0.8 * lengthMult, r * 0.6 * widthMult, r * 0.5);
-      g.strokeCircle(r * 0.8 * lengthMult, r * 0.6 * widthMult, r * 0.5);
+      // Lobster: Segmented body, big claws, undulating tail
+      
+      // Tail (drawn first so it's behind body)
+      for (let i = 4; i >= 1; i--) {
+        const tailX = -r * 0.8 * lengthMult - i * r * 0.35;
+        const waveY = Math.sin(this.gameTime * 0.005 - i * 0.5) * r * 0.2;
+        const width = r * (0.8 - i * 0.15);
+        g.beginPath();
+        g.moveTo(tailX, waveY - width);
+        g.lineTo(tailX - r * 0.4, waveY - width * 0.5);
+        g.lineTo(tailX - r * 0.4, waveY + width * 0.5);
+        g.lineTo(tailX, waveY + width);
+        g.closePath();
+        g.fillPath();
+        g.strokePath();
+      }
+      
+      // Trapezium Body
+      g.beginPath();
+      g.moveTo(r * 0.6 * lengthMult, -r * 0.3 * widthMult); // front top
+      g.lineTo(r * 0.6 * lengthMult, r * 0.3 * widthMult); // front bottom
+      g.lineTo(-r * 0.8 * lengthMult, r * 0.6 * widthMult); // back bottom
+      g.lineTo(-r * 0.8 * lengthMult, -r * 0.6 * widthMult); // back top
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Arms (segmented rectangles)
+      // Left arm
+      g.fillRect(0, -r * 0.7 * widthMult, r * 0.5 * lengthMult, r * 0.2);
+      g.strokeRect(0, -r * 0.7 * widthMult, r * 0.5 * lengthMult, r * 0.2);
+      g.fillRect(r * 0.5 * lengthMult, -r * 0.9 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      g.strokeRect(r * 0.5 * lengthMult, -r * 0.9 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      
+      // Left Claw (massive triangle)
+      g.beginPath();
+      g.moveTo(r * 0.5 * lengthMult, -r * 0.9 * widthMult);
+      g.lineTo(r * 1.6 * lengthMult, -r * 1.4 * widthMult);
+      g.lineTo(r * 1.4 * lengthMult, -r * 0.4 * widthMult);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Right arm
+      g.fillRect(0, r * 0.5 * widthMult, r * 0.5 * lengthMult, r * 0.2);
+      g.strokeRect(0, r * 0.5 * widthMult, r * 0.5 * lengthMult, r * 0.2);
+      g.fillRect(r * 0.5 * lengthMult, r * 0.4 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      g.strokeRect(r * 0.5 * lengthMult, r * 0.4 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      
+      // Right Claw (massive triangle)
+      g.beginPath();
+      g.moveTo(r * 0.5 * lengthMult, r * 0.9 * widthMult);
+      g.lineTo(r * 1.6 * lengthMult, r * 1.4 * widthMult);
+      g.lineTo(r * 1.4 * lengthMult, r * 0.4 * widthMult);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
     } else {
       // Leviathan
       g.beginPath();
@@ -3997,7 +4082,9 @@ export class Game extends Scene {
         strokeThickness: 3.5,
       }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
     } else {
+      if (this.bossHpText) {
       this.bossHpText.setPosition(width / 2, barY - 14).setVisible(true);
+    }
     }
 
     const g = this.bossHpBarGraphics;
