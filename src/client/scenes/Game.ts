@@ -66,7 +66,7 @@ type Enemy = {
   color?: number;
   bossType?: 'leviathan' | 'octopus' | 'squid' | 'lobster';
   maxHp?: number;
-  state?: 'spawning' | 'idle' | 'minions' | 'spread' | 'charge_windup' | 'charge' | 'shockwave' | 'cooldown' | 'poison_cone';
+  state?: 'spawning' | 'idle' | 'minions' | 'spread' | 'charge_windup' | 'charge' | 'shockwave' | 'cooldown' | 'poison_cone' | 'snapping_windup' | 'snapping';
   stateTimer?: number;
   attackCycle?: number;
   particles?: BossParticle[];
@@ -146,11 +146,11 @@ const PICKUP_RADIUS = PLAYER_RADIUS + TOKEN_RADIUS + 32;
 const PROJECTILE_RADIUS = 4;
 const PROJECTILE_SPEED = 200;
 const MAX_HP = 100;
-const ZOMBIE_DAMAGE = 20;
+const ZOMBIE_DAMAGE = 14;
 const ZOMBIE_RADIUS = 12;
 const ATTACKER_RADIUS = 14;
-const ATTACKER_DAMAGE_MIN = 25;
-const ATTACKER_DAMAGE_MAX = 35;
+const ATTACKER_DAMAGE_MIN = 17;
+const ATTACKER_DAMAGE_MAX = 24;
 
 const ATTACKER_PROJECTILE_INTERVAL_MIN = 1200;
 const ATTACKER_PROJECTILE_INTERVAL_MAX = 2000;
@@ -3753,9 +3753,35 @@ export class Game extends Scene {
           e.x += e.dirX * e.speed * dt;
           e.y += e.dirY * e.speed * dt;
         }
+      } else if (e.state === 'snapping_windup') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+        }
+        if (e.stateTimer !== undefined && e.stateTimer <= 0) {
+          e.state = 'snapping';
+          e.stateTimer = 1.0;
+          const angle = Phaser.Math.Angle.Between(e.x, e.y, this.playerX, this.playerY);
+          e.chargeDirX = Math.cos(angle);
+          e.chargeDirY = Math.sin(angle);
+        }
+      } else if (e.state === 'snapping') {
+        e.dirX = e.chargeDirX!;
+        e.dirY = e.chargeDirY!;
+        const snapSpeed = 650;
+        e.x += e.chargeDirX! * snapSpeed * dt;
+        e.y += e.chargeDirY! * snapSpeed * dt;
+
+        e.x = Phaser.Math.Clamp(e.x, e.radius, this.scale.width - e.radius);
+        e.y = Phaser.Math.Clamp(e.y, e.radius, this.scale.height - e.radius);
+        
+        // Biting damage check is handled in player takeDamage check via radius collision
       }
 
-      if (e.state !== 'charge_windup' && e.stateTimer !== undefined && e.stateTimer <= 0) {
+      if (e.state !== 'charge_windup' && e.state !== 'snapping_windup' && e.stateTimer !== undefined && e.stateTimer <= 0) {
         e.state = 'cooldown';
         e.stateTimer = 1.5;
         if (this.bossShockwaveRing) {
@@ -3783,8 +3809,14 @@ export class Game extends Scene {
         e.projectileTimer = 0;
       }
     } else if (cycle === 2) {
-      e.state = 'charge_windup';
-      e.stateTimer = e.bossType === 'squid' ? 0.2 : 0.4; // squid winds up faster
+      const dist = Phaser.Math.Distance.Between(e.x, e.y, this.playerX, this.playerY);
+      if (e.bossType === 'lobster' && dist < 600) {
+        e.state = 'snapping_windup';
+        e.stateTimer = 0.3; // fast windup
+      } else {
+        e.state = 'charge_windup';
+        e.stateTimer = e.bossType === 'squid' ? 0.2 : 0.4; // squid winds up faster
+      }
     } else if (cycle === 3) {
       e.state = 'shockwave';
       e.stateTimer = 2.5;
@@ -3926,59 +3958,126 @@ export class Game extends Scene {
       }
     } else if (e.bossType === 'lobster') {
       // Lobster: Segmented body, big claws, undulating tail
-      
+      const lobR = r * 0.8; // Reduce lobster size
+
       // Tail (drawn first so it's behind body)
       for (let i = 4; i >= 1; i--) {
-        const tailX = -r * 0.8 * lengthMult - i * r * 0.35;
-        const waveY = Math.sin(this.gameTime * 0.005 - i * 0.5) * r * 0.2;
-        const width = r * (0.8 - i * 0.15);
+        const tailX = -lobR * 0.8 * lengthMult - (i - 1) * lobR * 0.35;
+        const waveY = Math.sin(this.gameTime * 0.005 - i * 0.5) * lobR * 0.2;
+        const width = lobR * (0.8 - i * 0.15);
         g.beginPath();
         g.moveTo(tailX, waveY - width);
-        g.lineTo(tailX - r * 0.4, waveY - width * 0.5);
-        g.lineTo(tailX - r * 0.4, waveY + width * 0.5);
+        g.lineTo(tailX - lobR * 0.4, waveY - width * 0.5);
+        g.lineTo(tailX - lobR * 0.4, waveY + width * 0.5);
         g.lineTo(tailX, waveY + width);
         g.closePath();
         g.fillPath();
         g.strokePath();
       }
       
-      // Trapezium Body
+      // Trapezium Body (Starts at 0, extends back)
+      // Arms will start near front
+      const bodyFrontX = lobR * 0.6 * lengthMult;
+      const bodyBackX = -lobR * 0.8 * lengthMult;
       g.beginPath();
-      g.moveTo(r * 0.6 * lengthMult, -r * 0.3 * widthMult); // front top
-      g.lineTo(r * 0.6 * lengthMult, r * 0.3 * widthMult); // front bottom
-      g.lineTo(-r * 0.8 * lengthMult, r * 0.6 * widthMult); // back bottom
-      g.lineTo(-r * 0.8 * lengthMult, -r * 0.6 * widthMult); // back top
+      g.moveTo(bodyFrontX, -lobR * 0.3 * widthMult); // front top
+      g.lineTo(bodyFrontX, lobR * 0.3 * widthMult); // front bottom
+      g.lineTo(bodyBackX, lobR * 0.6 * widthMult); // back bottom
+      g.lineTo(bodyBackX, -lobR * 0.6 * widthMult); // back top
       g.closePath();
       g.fillPath();
       g.strokePath();
       
-      // Arms (segmented rectangles)
-      // Left arm
-      g.fillRect(0, -r * 0.7 * widthMult, r * 0.5 * lengthMult, r * 0.2);
-      g.strokeRect(0, -r * 0.7 * widthMult, r * 0.5 * lengthMult, r * 0.2);
-      g.fillRect(r * 0.5 * lengthMult, -r * 0.9 * widthMult, r * 0.2, r * 0.5 * widthMult);
-      g.strokeRect(r * 0.5 * lengthMult, -r * 0.9 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      // Arms (segmented rectangles connected to the body at bodyFrontX * 0.5)
+      const armStartX = bodyFrontX * 0.5;
       
-      // Left Claw (massive triangle)
+      // Left arm
+      g.fillRect(armStartX, -lobR * 0.7 * widthMult, lobR * 0.5 * lengthMult, lobR * 0.2);
+      g.strokeRect(armStartX, -lobR * 0.7 * widthMult, lobR * 0.5 * lengthMult, lobR * 0.2);
+      const elbowLX = armStartX + lobR * 0.5 * lengthMult;
+      g.fillRect(elbowLX, -lobR * 0.9 * widthMult, lobR * 0.2, lobR * 0.5 * widthMult);
+      g.strokeRect(elbowLX, -lobR * 0.9 * widthMult, lobR * 0.2, lobR * 0.5 * widthMult);
+      
+      // Left Claw: Trapzeium fist + 2 biting triangles
+      const clawLX = elbowLX + lobR * 0.1;
+      const clawLY = -lobR * 0.9 * widthMult;
+      // Fist
       g.beginPath();
-      g.moveTo(r * 0.5 * lengthMult, -r * 0.9 * widthMult);
-      g.lineTo(r * 1.6 * lengthMult, -r * 1.4 * widthMult);
-      g.lineTo(r * 1.4 * lengthMult, -r * 0.4 * widthMult);
+      g.moveTo(clawLX, clawLY);
+      g.lineTo(clawLX, clawLY - lobR * 0.3);
+      g.lineTo(clawLX + lobR * 0.5, clawLY - lobR * 0.4);
+      g.lineTo(clawLX + lobR * 0.5, clawLY + lobR * 0.1);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Biting animation rotation
+      let biteAngle = 0;
+      if (e.state === 'snapping' || e.state === 'snapping_windup') {
+        biteAngle = Math.abs(Math.sin(this.gameTime * 0.02)) * 0.5;
+      }
+      
+      // Top Pincer (Long Triangle)
+      g.beginPath();
+      g.moveTo(clawLX + lobR * 0.5, clawLY - lobR * 0.4);
+      // rotate tip up
+      const tipLX1 = clawLX + lobR * 0.5 + Math.cos(-biteAngle) * (lobR * 1.0);
+      const tipLY1 = clawLY - lobR * 0.4 + Math.sin(-biteAngle) * (lobR * 1.0);
+      g.lineTo(tipLX1, tipLY1);
+      g.lineTo(clawLX + lobR * 0.5, clawLY - lobR * 0.1);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Bottom Pincer (Short Triangle)
+      g.beginPath();
+      g.moveTo(clawLX + lobR * 0.5, clawLY - lobR * 0.1);
+      const tipLX2 = clawLX + lobR * 0.5 + Math.cos(biteAngle) * (lobR * 0.6);
+      const tipLY2 = clawLY - lobR * 0.1 + Math.sin(biteAngle) * (lobR * 0.6);
+      g.lineTo(tipLX2, tipLY2);
+      g.lineTo(clawLX + lobR * 0.5, clawLY + lobR * 0.1);
       g.closePath();
       g.fillPath();
       g.strokePath();
       
       // Right arm
-      g.fillRect(0, r * 0.5 * widthMult, r * 0.5 * lengthMult, r * 0.2);
-      g.strokeRect(0, r * 0.5 * widthMult, r * 0.5 * lengthMult, r * 0.2);
-      g.fillRect(r * 0.5 * lengthMult, r * 0.4 * widthMult, r * 0.2, r * 0.5 * widthMult);
-      g.strokeRect(r * 0.5 * lengthMult, r * 0.4 * widthMult, r * 0.2, r * 0.5 * widthMult);
+      g.fillRect(armStartX, lobR * 0.5 * widthMult, lobR * 0.5 * lengthMult, lobR * 0.2);
+      g.strokeRect(armStartX, lobR * 0.5 * widthMult, lobR * 0.5 * lengthMult, lobR * 0.2);
+      const elbowRX = armStartX + lobR * 0.5 * lengthMult;
+      g.fillRect(elbowRX, lobR * 0.4 * widthMult, lobR * 0.2, lobR * 0.5 * widthMult);
+      g.strokeRect(elbowRX, lobR * 0.4 * widthMult, lobR * 0.2, lobR * 0.5 * widthMult);
       
-      // Right Claw (massive triangle)
+      // Right Claw: Trapzeium fist + 2 biting triangles
+      const clawRX = elbowRX + lobR * 0.1;
+      const clawRY = lobR * 0.9 * widthMult;
+      // Fist
       g.beginPath();
-      g.moveTo(r * 0.5 * lengthMult, r * 0.9 * widthMult);
-      g.lineTo(r * 1.6 * lengthMult, r * 1.4 * widthMult);
-      g.lineTo(r * 1.4 * lengthMult, r * 0.4 * widthMult);
+      g.moveTo(clawRX, clawRY);
+      g.lineTo(clawRX, clawRY + lobR * 0.3);
+      g.lineTo(clawRX + lobR * 0.5, clawRY + lobR * 0.4);
+      g.lineTo(clawRX + lobR * 0.5, clawRY - lobR * 0.1);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Top Pincer (Short Triangle) - mirrored, so top is inner
+      g.beginPath();
+      g.moveTo(clawRX + lobR * 0.5, clawRY - lobR * 0.1);
+      const tipRX1 = clawRX + lobR * 0.5 + Math.cos(-biteAngle) * (lobR * 0.6);
+      const tipRY1 = clawRY - lobR * 0.1 + Math.sin(-biteAngle) * (lobR * 0.6);
+      g.lineTo(tipRX1, tipRY1);
+      g.lineTo(clawRX + lobR * 0.5, clawRY + lobR * 0.1);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      
+      // Bottom Pincer (Long Triangle)
+      g.beginPath();
+      g.moveTo(clawRX + lobR * 0.5, clawRY + lobR * 0.1);
+      const tipRX2 = clawRX + lobR * 0.5 + Math.cos(biteAngle) * (lobR * 1.0);
+      const tipRY2 = clawRY + lobR * 0.1 + Math.sin(biteAngle) * (lobR * 1.0);
+      g.lineTo(tipRX2, tipRY2);
+      g.lineTo(clawRX + lobR * 0.5, clawRY + lobR * 0.4);
       g.closePath();
       g.fillPath();
       g.strokePath();

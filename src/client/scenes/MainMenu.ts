@@ -1400,13 +1400,14 @@ export class MainMenu extends Scene {
     const isMobile = this.scale.width < 800;
     const content = `
 1. ${isMobile ? 'Drag the Joystick on the left to swim or move.' : 'Use WASD keys to swim or move.'}
-2. Tap the screen while moving to shoot.
-3. Collect geometric essences dropped by enemies:
+2. Tap the spell panel (or press 1-4) to cast spells.
+3. Collect spell orbs dropped by enemies:
    - YELLOW ▲ | GREEN ● | PURPLE ■
-4. Cast devastating spells by matching spell orbs:
-   - Trident (3 same spell orbs)
-   - Nova (2 same, 1 diff)
-   - Lightning (1 of each)
+4. Cast devastating spells with the right orb recipes:
+   - Spear (2 Purple, 1 Yellow)
+   - Burst (2 Yellow, 1 Purple)
+   - Lightning (2 Green, 1 Purple)
+   - Poison (1 of each)
 5. Kill 10 Bosses for Titan Fall Daily XP!
 6. Survive the Abyssal Depths!
 `;
