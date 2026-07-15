@@ -64,8 +64,9 @@ type Enemy = {
   baseX?: number;
   baseY?: number;
   color?: number;
+  bossType?: 'leviathan' | 'octopus' | 'squid' | 'lobster';
   maxHp?: number;
-  state?: 'spawning' | 'idle' | 'minions' | 'spread' | 'charge_windup' | 'charge' | 'shockwave' | 'cooldown';
+  state?: 'spawning' | 'idle' | 'minions' | 'spread' | 'charge_windup' | 'charge' | 'shockwave' | 'cooldown' | 'poison_cone';
   stateTimer?: number;
   attackCycle?: number;
   particles?: BossParticle[];
@@ -87,6 +88,7 @@ type Projectile = {
   radius: number;
   damage: number;
   isRedCircle?: boolean;
+  isVioletPoison?: boolean;
 };
 
 type Token = {
@@ -137,7 +139,7 @@ const TOKEN_RADIUS = 7;
 const TOKEN_BOB_AMPLITUDE = 4;
 const TOKEN_BOB_SPEED = 0.003;
 const PLAYER_SPEED = 300;
-const SPAWN_INTERVAL = 1200;
+const SPAWN_INTERVAL = 900;
 const START_DELAY = 1500;
 const SCORE_PER_SECOND = 10;
 const PICKUP_RADIUS = PLAYER_RADIUS + TOKEN_RADIUS + 32;
@@ -149,16 +151,16 @@ const ZOMBIE_RADIUS = 15;
 const ATTACKER_RADIUS = 13;
 const ATTACKER_DAMAGE_MIN = 1;
 const ATTACKER_DAMAGE_MAX = 3;
-const ATTACKER_PROJECTILE_INTERVAL_MIN = 2000;
-const ATTACKER_PROJECTILE_INTERVAL_MAX = 3000;
+const ATTACKER_PROJECTILE_INTERVAL_MIN = 1200;
+const ATTACKER_PROJECTILE_INTERVAL_MAX = 2000;
 const BUFF_RADIUS = 11;
 const BUFF_HEAL = 20;
 const BUFF_SPEED_DURATION = 5000;
 const BUFF_SPEED_MULTIPLIER = 1.5;
 const BUFF_REPEL_DISTANCE = 80;
-const CURRENT_SPAWN_WEIGHT = 35;
-const ZOMBIE_SPAWN_WEIGHT = 18;
-const ATTACKER_SPAWN_WEIGHT = 22;
+const CURRENT_SPAWN_WEIGHT = 40;
+const ZOMBIE_SPAWN_WEIGHT = 25;
+const ATTACKER_SPAWN_WEIGHT = 25;
 
 const ENEMY_COLORS = [
   0xff1744, // Bright Red
@@ -345,7 +347,8 @@ export class Game extends Scene {
   fxGraphics: Phaser.GameObjects.Graphics | null = null;
 
   // Phase 6 — daily glyph, progression, ambient
-  dailyGlyph: Shape = 'yellow';
+  dailyBonusIndex: number = 0;
+  dailyGlyph: string = 'yellow';
   dailyGlyphText: Phaser.GameObjects.Text | null = null;
   xpEarnedText: Phaser.GameObjects.Text | null = null;
   totalKillsCount: number = 0;
@@ -371,13 +374,13 @@ export class Game extends Scene {
   bossHpBarGraphics: Phaser.GameObjects.Graphics | null = null;
   bossHpText: Phaser.GameObjects.Text | null = null;
   bossShockwaveRing: { x: number; y: number; currentRadius: number; maxRadius: number; speed: number; active: boolean; hasHitPlayer: boolean } | null = null;
-  bossTimer: number = 20;
+  bossTimer: number = 40;
   bossSpawnCount: number = 0;
   lastBossSchemeIndex: number | undefined = undefined;
 
   // Depth meter
   depthMeterGraphics: Phaser.GameObjects.Graphics | null = null;
-  bossTimerMax: number = 20;
+  bossTimerMax: number = 40;
 
   // Boss HP phase tracking
   bossPhaseTriggered: Set<number> = new Set();
@@ -452,7 +455,7 @@ export class Game extends Scene {
     this.killTimestamps = [];
     this.playerDead = false;
     this.bossPhaseTriggered = new Set();
-    this.bossTimerMax = 20;
+    this.bossTimerMax = 40;
     this.killComboCount = 0;
     this.lastComboCount = 0;
     this.heatMode = false;
@@ -469,8 +472,9 @@ export class Game extends Scene {
     this.tridentHits.clear();
 
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-    const shapes = ['yellow', 'green', 'purple'] as const;
-    this.dailyGlyph = shapes[daysSinceEpoch % 3]!;
+    this.dailyBonusIndex = daysSinceEpoch % 5;
+    const shapes = ['yellow', 'green', 'purple', 'boss_slayer', 'titan_fall'] as const;
+    this.dailyGlyph = shapes[this.dailyBonusIndex] || 'yellow';
     this.dailyGlyphText = null;
     this.xpEarnedText = null;
     this.totalKillsCount = 0;
@@ -486,7 +490,7 @@ export class Game extends Scene {
     this.bossHpBarGraphics = null;
     this.bossHpText = null;
     this.bossShockwaveRing = null;
-    this.bossTimer = 20;
+    this.bossTimer = 40;
     this.bossSpawnCount = 0;
     this.lastBossSchemeIndex = undefined;
   }
@@ -536,18 +540,20 @@ export class Game extends Scene {
       .setDepth(10);
 
     // ── Daily Glyph — top-left below score
-    const glyphCol =
-      this.dailyGlyph === 'yellow' ? '#ffcc00'
-      : this.dailyGlyph === 'green' ? '#00ff66'
-      : '#aa44ff';
+    let dColor = '#ffcc00';
+    let dText = '★ YELLOW ▲ (+20 SCORE)';
+    if (this.dailyBonusIndex === 1) { dColor = '#00ff66'; dText = '★ GREEN ● (+20 SCORE)'; }
+    if (this.dailyBonusIndex === 2) { dColor = '#d500f9'; dText = '★ PURPLE ■ (+20 SCORE)'; }
+    if (this.dailyBonusIndex === 3) { dColor = '#ff5252'; dText = '★ BOSS SLAYER (2x BOSS XP)'; }
+    if (this.dailyBonusIndex === 4) { dColor = '#ff9800'; dText = '★ TITAN FALL (10 BOSSES -> 4x XP)'; }
+
     this.dailyGlyphText = this.add
-      .text(12, 40, `★ DAILY BONUS: ${this.dailyGlyph.toUpperCase()} (+20 SCORE)`, {
+      .text(12, 40, dText, {
         fontFamily: 'Arial, sans-serif',
         fontSize: '14px',
-        color: glyphCol,
+        color: dColor,
         stroke: '#000000',
         strokeThickness: 2.5,
-
       })
       .setScrollFactor(0)
       .setDepth(10);
@@ -2234,6 +2240,13 @@ export class Game extends Scene {
       p.graphics.strokeCircle(p.x, p.y, p.radius);
       return;
     }
+    if (p.isVioletPoison) {
+      p.graphics.fillStyle(0x8A2BE2, 0.9); // Dark violet
+      p.graphics.fillCircle(p.x, p.y, p.radius);
+      p.graphics.lineStyle(1.5, 0x4B0082, 1.0); // Indigo stroke
+      p.graphics.strokeCircle(p.x, p.y, p.radius);
+      return;
+    }
     const heading = Math.atan2(p.vy, p.vx);
     const cos = Math.cos(heading);
     const sin = Math.sin(heading);
@@ -3362,13 +3375,18 @@ export class Game extends Scene {
       if (this.bossHpBarGraphics) this.bossHpBarGraphics.destroy();
       if (this.bossHpText) this.bossHpText.destroy();
 
+      let finalXp = this.xpEarned;
+      if (this.dailyBonusIndex === 4 && this.bossSpawnCount >= 10) {
+        finalXp *= 4;
+      }
+
       this.scene.start('GameOver', {
         score: Math.floor(this.score),
         bestTridentChain: this.bestTridentChain,
         bestLightningChain: this.bestLightningChain,
         bestNovaChain: this.bestNovaChain,
         bestPoisonChain: this.bestPoisonChain,
-        xpEarned: this.xpEarned,
+        xpEarned: finalXp,
         bossPercentReached: bossPercent,
       });
     });
@@ -3394,9 +3412,13 @@ export class Game extends Scene {
     this.cameras.main.shake(400, 0.05);
     this.playSound('boss_spawn');
 
-    // Polish: dramatic "LEVIATHAN AWAKENS" announcement
+    const bossTypes: Array<'leviathan' | 'octopus' | 'squid' | 'lobster'> = ['leviathan', 'octopus', 'squid', 'lobster'];
+    const bType = bossTypes[Math.floor(Math.random() * bossTypes.length)]!;
+    const bossName = bType.toUpperCase();
+
+    // Polish: dramatic "[BOSS] AWAKENS" announcement
     const awakensText = this.add
-      .text(this.scale.width / 2, this.scale.height / 2, 'LEVIATHAN\nAWAKENS', {
+      .text(this.scale.width / 2, this.scale.height / 2, `${bossName}\nAWAKENS`, {
         fontFamily: 'Arial Black',
         fontSize: '42px',
         color: '#ff2222',
@@ -3460,6 +3482,8 @@ export class Game extends Scene {
     this.lastBossSchemeIndex = schemeIndex;
     const scheme = BOSS_COLOR_SCHEMES[schemeIndex]!;
 
+    // (bType is picked above)
+
     const bossEnemy: Enemy = {
       kind: 'boss',
       graphics,
@@ -3468,7 +3492,7 @@ export class Game extends Scene {
       hp: bossMaxHp,
       maxHp: bossMaxHp,
       radius: bossRadius,
-      speed: 35,
+      speed: 75,
       slowTimer: 0,
       state: 'spawning',
       stateTimer: 0.5,
@@ -3477,6 +3501,7 @@ export class Game extends Scene {
       essenceTimer: 3.0,
       color: scheme.main,
       colorSecondary: scheme.secondary,
+      bossType: bType,
       dirX: 0,
       dirY: 1,
     };
@@ -3622,8 +3647,8 @@ export class Game extends Scene {
           const baseAngle = Phaser.Math.Angle.Between(e.x, e.y, this.playerX, this.playerY);
           const angles = [baseAngle - 0.4, baseAngle - 0.2, baseAngle, baseAngle + 0.2, baseAngle + 0.4];
           angles.forEach((angle) => {
-            const vx = Math.cos(angle) * 220; // Faster bullets
-            const vy = Math.sin(angle) * 220;
+            const vx = Math.cos(angle) * 300; // Faster bullets
+            const vy = Math.sin(angle) * 300;
             const graphics = this.add.graphics().setDepth(6);
             const proj: Projectile = {
               graphics,
@@ -3638,6 +3663,43 @@ export class Game extends Scene {
             this.projectiles.push(proj);
             this.drawProjectile(proj);
           });
+        }
+      } else if (e.state === 'poison_cone') {
+        const dx = this.playerX - e.x;
+        const dy = this.playerY - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len > 0) {
+          e.dirX = dx / len;
+          e.dirY = dy / len;
+          e.x += e.dirX * e.speed * dt;
+          e.y += e.dirY * e.speed * dt;
+        }
+
+        e.projectileTimer = (e.projectileTimer || 0) - dt;
+        if (e.projectileTimer <= 0) {
+          e.projectileTimer = 0.12; // Rapid fire poison
+          const baseAngle = Phaser.Math.Angle.Between(e.x, e.y, this.playerX, this.playerY);
+          const count = 5;
+          for (let i = 0; i < count; i++) {
+            // Increased angle spread by 20 deg (~0.35 rads), so instead of +/- 0.6 it's +/- 0.77
+            const angle = baseAngle + (Math.random() - 0.5) * 1.55;
+            // Increased range (effectively speed) significantly
+            const vx = Math.cos(angle) * (500 + Math.random() * 300);
+            const vy = Math.sin(angle) * (500 + Math.random() * 300);
+            const graphics = this.add.graphics().setDepth(6);
+            const proj: Projectile = {
+              graphics,
+              x: e.x,
+              y: e.y,
+              vx,
+              vy,
+              radius: 5 + Math.random() * 6,
+              damage: 8,
+              isVioletPoison: true,
+            };
+            this.projectiles.push(proj);
+            this.drawProjectile(proj);
+          }
         }
       } else if (e.state === 'charge_windup') {
         const dx = this.playerX - e.x;
@@ -3657,8 +3719,11 @@ export class Game extends Scene {
       } else if (e.state === 'charge') {
         e.dirX = e.chargeDirX!;
         e.dirY = e.chargeDirY!;
-        e.x += e.chargeDirX! * 450 * dt; // Faster charge speed
-        e.y += e.chargeDirY! * 450 * dt;
+        let chargeSpeed = 450;
+        if (e.bossType === 'squid') chargeSpeed = 850; // squid dash is incredibly fast
+        
+        e.x += e.chargeDirX! * chargeSpeed * dt;
+        e.y += e.chargeDirY! * chargeSpeed * dt;
 
         e.x = Phaser.Math.Clamp(e.x, e.radius, this.scale.width - e.radius);
         e.y = Phaser.Math.Clamp(e.y, e.radius, this.scale.height - e.radius);
@@ -3706,26 +3771,36 @@ export class Game extends Scene {
 
   enterBossAttackState(e: Enemy): void {
     const cycle = e.attackCycle || 0;
-    if (cycle === 0) {
-      e.state = 'spread';
-      e.stateTimer = 3.5;
-      e.projectileTimer = 0;
-    } else if (cycle === 1) {
-      e.state = 'spread';
-      e.stateTimer = 3.5;
-      e.projectileTimer = 0;
+    if (cycle === 0 || cycle === 1) {
+      if (e.bossType === 'octopus') {
+        e.state = 'poison_cone';
+        e.stateTimer = 2.5;
+        e.projectileTimer = 0;
+      } else {
+        e.state = 'spread';
+        e.stateTimer = 2.5;
+        e.projectileTimer = 0;
+      }
     } else if (cycle === 2) {
       e.state = 'charge_windup';
-      e.stateTimer = 0.5;
+      e.stateTimer = e.bossType === 'squid' ? 0.2 : 0.4; // squid winds up faster
     } else if (cycle === 3) {
       e.state = 'shockwave';
-      e.stateTimer = 3.5;
+      e.stateTimer = 2.5;
+      
+      let waveMax = 260;
+      let waveSpeed = 350;
+      if (e.bossType === 'lobster') {
+        waveMax = 500; // Lobster has huge shockwaves
+        waveSpeed = 450;
+      }
+      
       this.bossShockwaveRing = {
         x: e.x,
         y: e.y,
         currentRadius: 0,
-        maxRadius: 260, // Larger shockwave radius
-        speed: 220, // Faster shockwave expansion
+        maxRadius: waveMax, 
+        speed: waveSpeed, 
         active: true,
         hasHitPlayer: false,
       };
@@ -3763,88 +3838,125 @@ export class Game extends Scene {
     const isHitFlashing = this.gameTime < (e.hitFlashTime || 0);
     const pulseFactor = 1.0 + 0.1 * Math.sin(this.gameTime * 0.008);
     
-    // Dynamically adjust scale based on how many times the boss has spawned
     const spawnIdx = this.bossSpawnCount || 0;
-    const lengthMult = 1.0 + (spawnIdx % 4) * 0.05; // Subtle length variation
-    const widthMult = 1.0 + ((spawnIdx + 2) % 4) * 0.05; // Subtle width variation
-    const overallScaleMult = 1.0 + Math.min(spawnIdx * 0.05, 0.15); // Cap overall growth at +15%
+    const lengthMult = 1.0 + (spawnIdx % 4) * 0.05;
+    const widthMult = 1.0 + ((spawnIdx + 2) % 4) * 0.05;
+    const overallScaleMult = 1.0 + Math.min(spawnIdx * 0.05, 0.15);
     
     const r = e.radius * pulseFactor * overallScaleMult;
-
-    // Soft colored glow around the fish
     const mainColor = e.color || 0x7B1FA2;
     const secondaryColor = e.colorSecondary || 0xD32F2F;
+
     g.fillStyle(secondaryColor, 0.15);
     g.fillCircle(0, 0, r * 1.35 * Math.max(lengthMult, widthMult));
 
-    // 1. Sleek symmetric closed body
     g.fillStyle(mainColor, 1);
     g.lineStyle(2.5, 0xffffff, 1);
-    g.beginPath();
-    g.moveTo(r * lengthMult, 0); // Nose tip
-    g.lineTo(r * 0.3 * lengthMult, -r * 0.5 * widthMult); // Upper cheek
-    g.lineTo(-r * 0.5 * lengthMult, -r * 0.3 * widthMult); // Upper body bulge
-    g.lineTo(-r * 1.1 * lengthMult, 0); // Tail base center
-    g.lineTo(-r * 0.5 * lengthMult, r * 0.3 * widthMult); // Lower body bulge
-    g.lineTo(r * 0.3 * lengthMult, r * 0.5 * widthMult); // Lower cheek
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
 
-    // Intricate geometric inner markings (enhancing visual appearance)
-    g.fillStyle(secondaryColor, 0.7);
-    g.fillCircle(0, 0, r * 0.2);
-    g.fillCircle(-r * 0.35 * lengthMult, 0, r * 0.15);
-    g.fillCircle(-r * 0.7 * lengthMult, 0, r * 0.1);
-    
-    // Chevrons pointing forward
-    g.beginPath();
-    g.moveTo(r * 0.4 * lengthMult, 0);
-    g.lineTo(r * 0.1 * lengthMult, -r * 0.15 * widthMult);
-    g.lineTo(r * 0.2 * lengthMult, 0);
-    g.lineTo(r * 0.1 * lengthMult, r * 0.15 * widthMult);
-    g.closePath();
-    g.fillPath();
+    if (e.bossType === 'octopus') {
+      // Octopus: Round head and 8 tentacles
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 / 8) * i + (this.gameTime * 0.002);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(Math.cos(angle - 0.2) * r * 1.5, Math.sin(angle - 0.2) * r * 1.5);
+        g.lineTo(Math.cos(angle + 0.2) * r * 1.5, Math.sin(angle + 0.2) * r * 1.5);
+        g.closePath();
+        g.fillPath();
+        g.strokePath();
+      }
+      g.fillCircle(0, 0, r * 0.8 * lengthMult);
+      g.strokeCircle(0, 0, r * 0.8 * lengthMult);
+    } else if (e.bossType === 'squid') {
+      // Squid: Triangular body, trailing tentacles
+      g.beginPath();
+      g.moveTo(r * lengthMult * 1.2, 0);
+      g.lineTo(-r * lengthMult * 0.8, -r * widthMult * 0.6);
+      g.lineTo(-r * lengthMult * 0.8, r * widthMult * 0.6);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
 
-    // 2. Large symmetric spiky side wings/fins
-    g.fillStyle(secondaryColor, 0.85);
-    g.lineStyle(1.8, 0xffffff, 1);
-    
-    // Top wing
-    g.beginPath();
-    g.moveTo(-r * 0.1 * lengthMult, -r * 0.4 * widthMult);
-    g.lineTo(-r * 0.5 * lengthMult, -r * 1.2 * widthMult); // Wing tip
-    g.lineTo(-r * 0.3 * lengthMult, -r * 0.3 * widthMult);
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
+      for (let i = 0; i < 5; i++) {
+        const yOffset = -r * 0.4 + (r * 0.8 / 4) * i;
+        g.beginPath();
+        g.moveTo(-r * lengthMult * 0.8, yOffset);
+        g.lineTo(-r * lengthMult * 1.8 + Math.sin(this.gameTime * 0.005 + i) * 20, yOffset * 1.5);
+        g.lineTo(-r * lengthMult * 0.8, yOffset + 5);
+        g.closePath();
+        g.fillPath();
+        g.strokePath();
+      }
+    } else if (e.bossType === 'lobster') {
+      // Lobster: Segmented body and big claws
+      g.fillRect(-r * 0.8 * lengthMult, -r * 0.4 * widthMult, r * 1.6 * lengthMult, r * 0.8 * widthMult);
+      g.strokeRect(-r * 0.8 * lengthMult, -r * 0.4 * widthMult, r * 1.6 * lengthMult, r * 0.8 * widthMult);
+      // Claws
+      g.fillStyle(secondaryColor, 1);
+      g.fillCircle(r * 0.8 * lengthMult, -r * 0.6 * widthMult, r * 0.5);
+      g.strokeCircle(r * 0.8 * lengthMult, -r * 0.6 * widthMult, r * 0.5);
+      g.fillCircle(r * 0.8 * lengthMult, r * 0.6 * widthMult, r * 0.5);
+      g.strokeCircle(r * 0.8 * lengthMult, r * 0.6 * widthMult, r * 0.5);
+    } else {
+      // Leviathan
+      g.beginPath();
+      g.moveTo(r * lengthMult, 0); // Nose tip
+      g.lineTo(r * 0.3 * lengthMult, -r * 0.5 * widthMult); // Upper cheek
+      g.lineTo(-r * 0.5 * lengthMult, -r * 0.3 * widthMult); // Upper body bulge
+      g.lineTo(-r * 1.1 * lengthMult, 0); // Tail base center
+      g.lineTo(-r * 0.5 * lengthMult, r * 0.3 * widthMult); // Lower body bulge
+      g.lineTo(r * 0.3 * lengthMult, r * 0.5 * widthMult); // Lower cheek
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
 
-    // Bottom wing
-    g.beginPath();
-    g.moveTo(-r * 0.1 * lengthMult, r * 0.4 * widthMult);
-    g.lineTo(-r * 0.5 * lengthMult, r * 1.2 * widthMult); // Wing tip
-    g.lineTo(-r * 0.3 * lengthMult, r * 0.3 * widthMult);
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
+      g.fillStyle(secondaryColor, 0.7);
+      g.fillCircle(0, 0, r * 0.2);
+      g.fillCircle(-r * 0.35 * lengthMult, 0, r * 0.15);
+      g.fillCircle(-r * 0.7 * lengthMult, 0, r * 0.1);
+      
+      g.beginPath();
+      g.moveTo(r * 0.4 * lengthMult, 0);
+      g.lineTo(r * 0.1 * lengthMult, -r * 0.15 * widthMult);
+      g.lineTo(r * 0.2 * lengthMult, 0);
+      g.lineTo(r * 0.1 * lengthMult, r * 0.15 * widthMult);
+      g.closePath();
+      g.fillPath();
 
-    // 3. Crescent forked tail fin
-    g.fillStyle(secondaryColor, 0.8);
-    g.beginPath();
-    g.moveTo(-r * 1.1 * lengthMult, 0);
-    g.lineTo(-r * 1.65 * lengthMult, -r * 0.55 * widthMult); // Upper tail tip
-    g.lineTo(-r * 1.35 * lengthMult, 0); // Inner tail center
-    g.lineTo(-r * 1.65 * lengthMult, r * 0.55 * widthMult); // Lower tail tip
-    g.closePath();
-    g.fillPath();
-    g.strokePath();
+      g.fillStyle(secondaryColor, 0.85);
+      g.lineStyle(1.8, 0xffffff, 1);
+      g.beginPath();
+      g.moveTo(-r * 0.1 * lengthMult, -r * 0.4 * widthMult);
+      g.lineTo(-r * 0.5 * lengthMult, -r * 1.2 * widthMult); // Wing tip
+      g.lineTo(-r * 0.3 * lengthMult, -r * 0.3 * widthMult);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+      g.beginPath();
+      g.moveTo(-r * 0.1 * lengthMult, r * 0.4 * widthMult);
+      g.lineTo(-r * 0.5 * lengthMult, r * 1.2 * widthMult); // Wing tip
+      g.lineTo(-r * 0.3 * lengthMult, r * 0.3 * widthMult);
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
 
-    // 4. Large glowing eyes facing right (symmetric on top/bottom)
+      g.fillStyle(secondaryColor, 0.8);
+      g.beginPath();
+      g.moveTo(-r * 1.1 * lengthMult, 0);
+      g.lineTo(-r * 1.65 * lengthMult, -r * 0.55 * widthMult); // Upper tail tip
+      g.lineTo(-r * 1.35 * lengthMult, 0); // Inner tail center
+      g.lineTo(-r * 1.65 * lengthMult, r * 0.55 * widthMult); // Lower tail tip
+      g.closePath();
+      g.fillPath();
+      g.strokePath();
+    }
+
     const eyeRadius = 9 * pulseFactor * overallScaleMult;
     if (isHitFlashing) {
       g.fillStyle(0xffffff, 1.0);
       g.fillCircle(r * 0.4 * lengthMult, -r * 0.2 * widthMult, eyeRadius);
       g.fillCircle(r * 0.4 * lengthMult, r * 0.2 * widthMult, eyeRadius);
+      g.fillCircle(0, 0, r * Math.max(lengthMult, widthMult) * 0.8); // flash body
     } else {
       g.fillStyle(0xFF0000, 1.0);
       g.fillCircle(r * 0.4 * lengthMult, -r * 0.2 * widthMult, eyeRadius);
@@ -3854,14 +3966,9 @@ export class Game extends Scene {
       g.fillCircle(r * 0.45 * lengthMult, r * 0.2 * widthMult, eyeRadius * 0.35);
     }
 
-    // 5. Hit flash overlay
-    if (isHitFlashing) {
-      g.fillStyle(0xffffff, 0.9);
-      g.fillCircle(0, 0, r * Math.max(lengthMult, widthMult) * 0.8);
-    }
-
     g.setPosition(e.x, e.y);
   }
+
 
   drawBossHpBar(): void {
     if (!this.boss || !this.isBossFight) {
@@ -3879,8 +3986,10 @@ export class Game extends Scene {
     if (!this.bossHpBarGraphics) {
       this.bossHpBarGraphics = this.add.graphics().setScrollFactor(0).setDepth(11);
     }
-    if (!this.bossHpText) {
-      this.bossHpText = this.add.text(width / 2, barY - 14, 'ABYSSAL LEVIATHAN', {
+    if (this.boss) {
+      const bType = this.boss.bossType || 'leviathan';
+      const bossName = bType === 'leviathan' ? 'ABYSSAL LEVIATHAN' : `ABYSSAL ${bType.toUpperCase()}`;
+      this.bossHpText = this.add.text(width / 2, barY - 14, bossName, {
         fontFamily: 'Arial Black',
         fontSize: '12px',
         color: '#FF1744',
@@ -3999,7 +4108,9 @@ export class Game extends Scene {
     // Bug fix: award XP for killing the boss
     this.addXp(10, e.x, e.y);
 
-    const txt = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, `LEVIATHAN SLAIN! +${bonus} BONUS!`, {
+    const bType = e.bossType || 'leviathan';
+    const bossName = bType.toUpperCase();
+    const txt = this.add.text(this.scale.width / 2, this.scale.height / 2 - 50, `${bossName} SLAIN! +${bonus} BONUS!`, {
       fontFamily: 'Arial Black',
       fontSize: '24px',
       color: '#ffd740',
@@ -4036,11 +4147,11 @@ export class Game extends Scene {
 
     this.bossSpawnCount++;
     if (this.bossSpawnCount % 2 === 1) {
-      // After odd number of bosses (1st, 3rd, 5th...), next interval is 20-25 secs
-      this.bossTimer = 20 + Math.random() * 5;
+      // After odd number of bosses, next interval is 15-20 secs (harder)
+      this.bossTimer = 45 + Math.random() * 10;
+      this.bossTimerMax = this.bossTimer;
     } else {
-      // After even number of bosses (2nd, 4th, 6th...), next interval is 30-35 secs
-      this.bossTimer = 30 + Math.random() * 5;
+      this.bossTimer = 55 + Math.random() * 10;
     }
 
     e.graphics.destroy();

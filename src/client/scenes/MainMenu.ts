@@ -51,10 +51,17 @@ export class MainMenu extends Scene {
   titleText: Phaser.GameObjects.Text | null = null;
   subtitleText: Phaser.GameObjects.Text | null = null;
   playButton: Phaser.GameObjects.Text | null = null;
+  upgradesRoadmapButton: Phaser.GameObjects.Text | null = null;
+  howToPlayButton: Phaser.GameObjects.Text | null = null;
   leaderboardButton: Phaser.GameObjects.Text | null = null;
 
   // Leaderboard Overlay Container
   leaderboardContainer: Phaser.GameObjects.Container | null = null;
+  howToPlayContainer: Phaser.GameObjects.Container | null = null;
+  howToPlayBg: Phaser.GameObjects.Graphics | null = null;
+  howToPlayTitle: Phaser.GameObjects.Text | null = null;
+  howToPlayContent: Phaser.GameObjects.Text | null = null;
+  howToPlayClose: Phaser.GameObjects.Text | null = null;
   overlayBgGraphics: Phaser.GameObjects.Graphics | null = null;
   overlayHeader: Phaser.GameObjects.Text | null = null;
   overlayCol1Title: Phaser.GameObjects.Text | null = null;
@@ -80,7 +87,7 @@ export class MainMenu extends Scene {
   btnNextPage: Phaser.GameObjects.Text | null = null;
 
   leaderboardsData: LeaderboardsData | null = null;
-  upgradesRoadmapButton: Phaser.GameObjects.Text | null = null;
+
 
   // Roadmap & Upgrades Overlay Container
   upgradesRoadmapContainer: Phaser.GameObjects.Container | null = null;
@@ -191,8 +198,17 @@ export class MainMenu extends Scene {
 
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(1);
 
-    // 5. Upgrades & Roadmap Button at depth 1
     this.upgradesRoadmapButton = this.add.text(0, 0, 'ROADMAP & UPGRADES', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 4,
+      align: 'center',
+
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(1);
+
+    this.howToPlayButton = this.add.text(0, 0, 'HOW TO PLAY', {
       fontFamily: 'Arial, sans-serif',
       fontSize: '24px',
       color: '#ffffff',
@@ -235,6 +251,12 @@ export class MainMenu extends Scene {
     this.upgradesRoadmapButton.on('pointerout', () => this.upgradesRoadmapButton?.setColor('#ffffff'));
     this.upgradesRoadmapButton.on('pointerdown', () => {
       this.showUpgradesRoadmapOverlay();
+    });
+
+    this.howToPlayButton.on('pointerover', () => this.howToPlayButton?.setColor('#4fc3f7'));
+    this.howToPlayButton.on('pointerout', () => this.howToPlayButton?.setColor('#ffffff'));
+    this.howToPlayButton.on('pointerdown', () => {
+      this.showHowToPlayOverlay();
     });
 
     this.leaderboardButton.on('pointerover', () => this.leaderboardButton?.setColor('#4fc3f7'));
@@ -508,20 +530,22 @@ export class MainMenu extends Scene {
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 3.5,
-      align: 'center',
     }).setOrigin(0.5).setDepth(1);
 
     // Populate Daily Glyph
-    const MS_PER_DAY = 1000 * 60 * 60 * 24;
-    const daysSinceEpoch = Math.floor(Date.now() / MS_PER_DAY);
-    const shapes: Array<'yellow' | 'green' | 'purple'> = ['yellow', 'green', 'purple'];
-    const dailyGlyph = shapes[daysSinceEpoch % 3]!;
+    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    const bonuses = [
+      { text: '★ Yellow Spell Orbs ▲ (gives +20 Score instead of +10!)', color: '#ffdd00' },
+      { text: '★ Green Spell Orbs ● (gives +20 Score instead of +10!)', color: '#00ff66' },
+      { text: '★ Purple Spell Orbs ■ (gives +20 Score instead of +10!)', color: '#cc00ff' },
+      { text: '★ BOSS SLAYER (Slaying bosses gives 2x XP!)', color: '#ff5252' },
+      { text: '★ TITAN FALL (Slay 10 bosses -> 4x XP on death!)', color: '#ff9800' }
+    ];
+    const dailyBonus = bonuses[daysSinceEpoch % 5] || bonuses[0]!;
     
     if (this.dailyGlyphText) {
-      const col = dailyGlyph === 'yellow' ? '#ffcc00' : dailyGlyph === 'green' ? '#00ff66' : '#d500f9';
-      const shapeStr = dailyGlyph === 'yellow' ? 'YELLOW ▲' : dailyGlyph === 'green' ? 'GREEN ●' : 'PURPLE ■';
-      this.dailyGlyphText.setText(`★ ${shapeStr} (gives +20 Score instead of +10!)`);
-      this.dailyGlyphText.setColor(col);
+      this.dailyGlyphText.setText(dailyBonus.text);
+      this.dailyGlyphText.setColor(dailyBonus.color);
     }
 
     // Last Score Text
@@ -631,6 +655,7 @@ export class MainMenu extends Scene {
       this.upgradesRoadmapContainer?.setVisible(false);
     });
 
+    this.setupHowToPlayOverlay();
     this.fetchStreakAndProgress();
 
     this.refreshLayout();
@@ -789,13 +814,18 @@ export class MainMenu extends Scene {
 
     // Buttons
     if (this.playButton) {
-      this.playButton.setPosition(midX, Math.round(height * 0.58));
+      this.playButton.setPosition(midX, Math.round(height * 0.53));
       this.playButton.setScale(1);
     }
 
     if (this.upgradesRoadmapButton) {
-      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.70));
+      this.upgradesRoadmapButton.setPosition(midX, Math.round(height * 0.62));
       this.upgradesRoadmapButton.setScale(1);
+    }
+
+    if (this.howToPlayButton) {
+      this.howToPlayButton.setPosition(midX, Math.round(height * 0.71));
+      this.howToPlayButton.setScale(1);
     }
 
     if (this.leaderboardButton) {
@@ -1165,6 +1195,23 @@ export class MainMenu extends Scene {
         this.welcomePopupClaimBtn.setFontSize(isMobile ? '18px' : '22px');
       }
     }
+
+    if (this.howToPlayContainer) {
+      if (this.howToPlayBg) {
+        this.howToPlayBg.clear();
+        this.howToPlayBg.fillStyle(0x000000, 0.95);
+        this.howToPlayBg.fillRect(0, 0, width, height);
+      }
+      if (this.howToPlayTitle) {
+        this.howToPlayTitle.setPosition(midX, height * 0.15);
+      }
+      if (this.howToPlayContent) {
+        this.howToPlayContent.setPosition(midX, height * 0.5);
+      }
+      if (this.howToPlayClose) {
+        this.howToPlayClose.setPosition(midX, height * 0.85);
+      }
+    }
   }
 
   private fetchStreakAndProgress(): void {
@@ -1331,5 +1378,65 @@ export class MainMenu extends Scene {
 
     this.refreshLayout();
   }
-}
 
+  setupHowToPlayOverlay(): void {
+    if (this.howToPlayContainer) return;
+    this.howToPlayContainer = this.add.container(0, 0).setDepth(20).setVisible(false);
+
+    this.howToPlayBg = this.add.graphics();
+    this.howToPlayBg.fillStyle(0x000000, 0.95);
+    this.howToPlayBg.fillRect(0, 0, this.scale.width, this.scale.height);
+    this.howToPlayContainer.add(this.howToPlayBg);
+
+    this.howToPlayTitle = this.add.text(this.scale.width / 2, this.scale.height * 0.15, 'HOW TO PLAY', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '32px',
+      color: '#ffdd00',
+      stroke: '#000000',
+      strokeThickness: 5,
+    }).setOrigin(0.5);
+    this.howToPlayContainer.add(this.howToPlayTitle);
+
+    const isMobile = this.scale.width < 800;
+    const content = `
+1. ${isMobile ? 'Drag the Joystick on the left to swim or move.' : 'Use WASD keys to swim or move.'}
+2. Tap the screen while moving to shoot.
+3. Collect geometric essences dropped by enemies:
+   - YELLOW ▲ | GREEN ● | PURPLE ■
+4. Cast devastating spells by matching spell orbs:
+   - Trident (3 same spell orbs)
+   - Nova (2 same, 1 diff)
+   - Lightning (1 of each)
+5. Kill 10 Bosses for Titan Fall Daily XP!
+6. Survive the Abyssal Depths!
+`;
+
+    this.howToPlayContent = this.add.text(this.scale.width / 2, this.scale.height / 2, content, {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '18px',
+      color: '#ffffff',
+      lineSpacing: 12,
+      align: 'center',
+      wordWrap: { width: Math.min(this.scale.width * 0.9, 450) }
+    }).setOrigin(0.5);
+    this.howToPlayContainer.add(this.howToPlayContent);
+
+    this.howToPlayClose = this.add.text(this.scale.width / 2, this.scale.height * 0.85, 'CLOSE', {
+      fontFamily: 'Arial, sans-serif',
+      fontSize: '24px',
+      color: '#ff5252',
+      stroke: '#000000',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    this.howToPlayContainer.add(this.howToPlayClose);
+
+    this.howToPlayClose.on('pointerdown', () => {
+      this.howToPlayContainer?.setVisible(false);
+    });
+  }
+
+  showHowToPlayOverlay(): void {
+    if (!this.howToPlayContainer) this.setupHowToPlayOverlay();
+    this.howToPlayContainer?.setVisible(true);
+  }
+}

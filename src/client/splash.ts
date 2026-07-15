@@ -23,11 +23,18 @@ discordLink.addEventListener('click', () => {
 });
 
 function init() {
-  // Compute daily glyph dynamically matching Game.ts daily glyph math:
   const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-  const shapes = ['YELLOW', 'GREEN', 'PURPLE'] as const;
-  const targetShape = shapes[daysSinceEpoch % 3]!;
-  dailyGlyphEl.textContent = `${targetShape} (gives +20 Score instead of +10 when collected!)`;
+    const bonuses = [
+      '★ Yellow Spell Orbs ▲ (gives +20 Score instead of +10!)',
+      '★ Green Spell Orbs ● (gives +20 Score instead of +10!)',
+      '★ Purple Spell Orbs ■ (gives +20 Score instead of +10!)',
+      '★ BOSS SLAYER (Slaying bosses gives 2x more XP!)',
+      '★ TITAN FALL (Slay 10 bosses and get 4x more XP on death!)'
+    ];
+  const targetText = bonuses[daysSinceEpoch % 5] || bonuses[0];
+  if (dailyGlyphEl) {
+    dailyGlyphEl.textContent = targetText as string;
+  }
 }
 
 init();
